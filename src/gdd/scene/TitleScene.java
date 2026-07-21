@@ -27,12 +27,6 @@ public class TitleScene extends JPanel {
 
     public TitleScene(Game game) {
         this.game = game;
-        // initBoard();
-        // initTitle();
-    }
-
-    private void initBoard() {
-
     }
 
     public void start() {
@@ -56,34 +50,29 @@ public class TitleScene extends JPanel {
             if (audioPlayer != null) {
                 audioPlayer.stop();
             }
-        } catch (Exception e) {
-            System.err.println("Error closing audio player.");
+        } catch (Exception e) {System.err.println("Error closing audio player.");
         }
     }
 
     private void initTitle() {
         var ii = new ImageIcon(IMG_TITLE);
         image = ii.getImage();
-
     }
 
     private void initAudio() {
         try {
             String filePath = "src/audio/title.wav";
             audioPlayer = new AudioPlayer(filePath);
-
             audioPlayer.play();
         } catch (Exception e) {
             System.err.println("Error with playing sound.");
         }
-
     }
 
     @Override
-    public void paintComponent(Graphics g) {
+    protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-
-        doDrawing(g);
+        doDrawing(g); // Fix: Re-instated original doDrawing call!
     }
 
     private void doDrawing(Graphics g) {
@@ -91,25 +80,37 @@ public class TitleScene extends JPanel {
         g.setColor(Color.black);
         g.fillRect(0, 0, d.width, d.height);
 
-        g.drawImage(image, 0, -80, d.width, d.height, this);
-
-        if (frame % 60 < 30) {
-            g.setColor(Color.red);
-        } else {
-            g.setColor(Color.white);
+        // 1. Draw title logo pushed up slightly to create room underneath
+        if (image != null) {
+            g.drawImage(image, 0, -40, d.width, d.height, this);
         }
 
-        g.setFont(g.getFont().deriveFont(32f));
-        String text = "Press SPACE to Start";
+        // 2. Blinking "Press SPACE to Start" text (Positioned right below logo)
+        if (frame % 60 < 30) {
+            g.setColor(Color.RED);
+        } else {
+            g.setColor(Color.WHITE);
+        }
+
+        // Clean retro monospaced font
+        g.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.BOLD, 22));
+        String text = "PRESS SPACE TO START";
         int stringWidth = g.getFontMetrics().stringWidth(text);
         int x = (d.width - stringWidth) / 2;
-        // int stringHeight = g.getFontMetrics().getAscent();
-        // int y = (d.height + stringHeight) / 2;
-        g.drawString(text, x, 600);
+        
+        // Y position = 580 (sits cleanly between title logo and bottom names)
+        g.drawString(text, x, 580);
 
-        g.setColor(Color.gray);
-        g.setFont(g.getFont().deriveFont(10f));
-        g.drawString("Game by Chayapol", 10, 650);
+        // 3. Team Members text
+        g.setColor(Color.LIGHT_GRAY);
+        g.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 14));
+        
+        String teamText = "Developed by: [Member 1], [Member 2], [Member 3]";
+        int teamWidth = g.getFontMetrics().stringWidth(teamText);
+        int teamX = (d.width - teamWidth) / 2;
+        
+        // Y position = 630 (near bottom margin)
+        g.drawString(teamText, teamX, 630);
 
         Toolkit.getDefaultToolkit().sync();
     }
@@ -143,10 +144,8 @@ public class TitleScene extends JPanel {
             System.out.println("Title.keyPressed: " + e.getKeyCode());
             int key = e.getKeyCode();
             if (key == KeyEvent.VK_SPACE) {
-                // Load the next scene
-                game.loadScene2();
+                game.loadScene1();
             }
-
         }
     }
 }

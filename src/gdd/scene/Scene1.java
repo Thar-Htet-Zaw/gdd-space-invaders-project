@@ -14,6 +14,7 @@ import gdd.sprite.Shot;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Graphics2D;
 import java.awt.Graphics;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -108,20 +109,17 @@ public class Scene1 extends JPanel {
     }
 
     private void loadSpawnDetails() {
-        // TODO load this from a file
-        spawnMap.put(50, new SpawnDetails("PowerUp-SpeedUp", 100, 0));
-        spawnMap.put(200, new SpawnDetails("Alien1", 200, 0));
-        spawnMap.put(300, new SpawnDetails("Alien1", 300, 0));
+        // Spawning off-screen to the right (X = 720) at different Y heights
+        spawnMap.put(50, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
+        
+        spawnMap.put(100, new SpawnDetails("Alien1", 720, 100));
+        spawnMap.put(150, new SpawnDetails("Alien1", 720, 250));
+        spawnMap.put(200, new SpawnDetails("Alien1", 720, 400));
 
-        spawnMap.put(400, new SpawnDetails("Alien1", 400, 0));
-        spawnMap.put(401, new SpawnDetails("Alien1", 450, 0));
-        spawnMap.put(402, new SpawnDetails("Alien1", 500, 0));
-        spawnMap.put(403, new SpawnDetails("Alien1", 550, 0));
-
-        spawnMap.put(500, new SpawnDetails("Alien1", 100, 0));
-        spawnMap.put(501, new SpawnDetails("Alien1", 150, 0));
-        spawnMap.put(502, new SpawnDetails("Alien1", 200, 0));
-        spawnMap.put(503, new SpawnDetails("Alien1", 350, 0));
+        spawnMap.put(300, new SpawnDetails("Alien1", 720, 150));
+        spawnMap.put(320, new SpawnDetails("Alien1", 720, 250));
+        spawnMap.put(340, new SpawnDetails("Alien1", 720, 350));
+        spawnMap.put(360, new SpawnDetails("Alien1", 720, 450));
     }
 
     private void initBoard() {
@@ -154,6 +152,8 @@ public class Scene1 extends JPanel {
 
     private void gameInit() {
 
+        player = new Player();
+
         enemies = new ArrayList<>();
         powerups = new ArrayList<>();
         explosions = new ArrayList<>();
@@ -171,41 +171,38 @@ public class Scene1 extends JPanel {
     }
 
     private void drawMap(Graphics g) {
-        // Draw scrolling starfield background
+        // Calculate smooth scrolling offset horizontally (1 pixel per frame)
+        int scrollOffset = (frame) % BLOCKWIDTH;
 
-        // Calculate smooth scrolling offset (1 pixel per frame)
-        int scrollOffset = (frame) % BLOCKHEIGHT;
+        // Calculate which columns to draw based on screen position
+        int baseCol = (frame) / BLOCKWIDTH;
+        int colsNeeded = (BOARD_WIDTH / BLOCKWIDTH) + 2; // +2 for smooth scrolling
 
-        // Calculate which rows to draw based on screen position
-        int baseRow = (frame) / BLOCKHEIGHT;
-        int rowsNeeded = (BOARD_HEIGHT / BLOCKHEIGHT) + 2; // +2 for smooth scrolling
+        // Loop through columns that should be visible on screen
+        for (int screenCol = 0; screenCol < colsNeeded; screenCol++) {
+            // Calculate which MAP column to use (with wrapping)
+            // Note: Since MAP is 2D array [row][col], we wrap based on the row length
+            int mapCol = (baseCol + screenCol) % MAP[0].length;
 
-        // Loop through rows that should be visible on screen
-        for (int screenRow = 0; screenRow < rowsNeeded; screenRow++) {
-            // Calculate which MAP row to use (with wrapping)
-            int mapRow = (baseRow + screenRow) % MAP.length;
+            // Calculate X position for this column to scroll left
+            int x = BOARD_WIDTH - ((screenCol * BLOCKWIDTH) - scrollOffset);
 
-            // Calculate Y position for this row
-            // int y = (screenRow * BLOCKHEIGHT) - scrollOffset;
-            int y = BOARD_HEIGHT - ( (screenRow * BLOCKHEIGHT) - scrollOffset );
-
-            // Skip if row is completely off-screen
-            if (y > BOARD_HEIGHT || y < -BLOCKHEIGHT) {
+            // Skip if column is completely off-screen
+            if (x > BOARD_WIDTH || x < -BLOCKWIDTH) {
                 continue;
             }
 
-            // Draw each column in this row
-            for (int col = 0; col < MAP[mapRow].length; col++) {
-                if (MAP[mapRow][col] == 1) {
-                    // Calculate X position
-                    int x = col * BLOCKWIDTH;
+            // Draw each row in this column
+            for (int row = 0; row < MAP.length; row++) {
+                if (MAP[row][mapCol] == 1) {
+                    // Calculate Y position
+                    int y = row * BLOCKHEIGHT;
 
                     // Draw a cluster of stars
                     drawStarCluster(g, x, y, BLOCKWIDTH, BLOCKHEIGHT);
                 }
             }
         }
-
     }
 
     private void drawStarCluster(Graphics g, int x, int y, int width, int height) {
@@ -264,25 +261,43 @@ public class Scene1 extends JPanel {
     }
 
     private void drawPlayer(Graphics g) {
+        if (player != null && player.isVisible()) {
+            Graphics2D g2d = (Graphics2D) g.create();
+            
+            // Get player coordinates and image dimensions
+            int x = player.getX();
+            int y = player.getY();
+            int width = player.getImage().getWidth(null);
+            int height = player.getImage().getHeight(null);
 
-        if (player.isVisible()) {
-
-            g.drawImage(player.getImage(), player.getX(), player.getY(), this);
-        }
-
-        if (player.isDying()) {
-
-            player.die();
-            inGame = false;
+            // Rotate around the center of the player ship
+            g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
+            
+            // Draw the player
+            g2d.drawImage(player.getImage(), x, y, this);
+            
+            // Dispose the graphics context copy
+            g2d.dispose();
         }
     }
 
     private void drawShot(Graphics g) {
 
+        // Inside Scene1.java where you draw shots:
         for (Shot shot : shots) {
-
             if (shot.isVisible()) {
-                g.drawImage(shot.getImage(), shot.getX(), shot.getY(), this);
+                Graphics2D g2d = (Graphics2D) g.create();
+
+                int x = shot.getX();
+                int y = shot.getY();
+                int width = shot.getImage().getWidth(null);
+                int height = shot.getImage().getHeight(null);
+
+                // Rotate 90 degrees so the vertical line becomes horizontal
+                g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
+
+                g2d.drawImage(shot.getImage(), x, y, this);
+                g2d.dispose();
             }
         }
     }
@@ -374,7 +389,6 @@ public class Scene1 extends JPanel {
 
     private void update() {
 
-
         // Check enemy spawn
         // TODO this approach can only spawn one enemy at a frame
         SpawnDetails sd = spawnMap.get(frame);
@@ -404,7 +418,7 @@ public class Scene1 extends JPanel {
         if (deaths == NUMBER_OF_ALIENS_TO_DESTROY) {
             inGame = false;
             timer.stop();
-            message = "Game won!";
+            game.loadScene2();
         }
 
         // player
@@ -456,15 +470,15 @@ public class Scene1 extends JPanel {
                     }
                 }
 
-                int y = shot.getY();
-                // y -= 4;
-                y -= 20;
+                // Replace the existing y-axis logic in the shot loop:
+                int x = shot.getX();
+                x += 20; // Move right instead of up
 
-                if (y < 0) {
+                if (x > BOARD_WIDTH) {
                     shot.die();
                     shotsToRemove.add(shot);
                 } else {
-                    shot.setY(y);
+                    shot.setX(x); 
                 }
             }
         }

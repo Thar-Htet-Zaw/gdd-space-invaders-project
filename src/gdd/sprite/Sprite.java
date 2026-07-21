@@ -2,7 +2,7 @@ package gdd.sprite;
 
 import java.awt.Image;
 
-abstract public class Sprite {
+public abstract class Sprite {
 
     protected boolean visible;
     protected Image image;
@@ -12,6 +12,7 @@ abstract public class Sprite {
     protected int x;
     protected int y;
     protected int dx;
+    protected int dy;
 
     public Sprite() {
         visible = true;

@@ -28,8 +28,10 @@ public class Alien1 extends Enemy {
         setImage(scaledImage);
     }
 
+    @Override
     public void act(int direction) {
-        this.y ++;
+        // Move towards the left side of the screen
+        this.x -= 2; 
     }
 
     public Bomb getBomb() {
