@@ -159,21 +159,31 @@ public class Scene1 extends JPanel {
         timer.start();
 
         gameInit();
-        initAudio();
+        //initAudio();
     }
 
     public void stop() {
-        timer.stop();
-        try {
-            if (audioPlayer != null) {
-                audioPlayer.stop();
+        if (timer != null && timer.isRunning()) {
+            timer.stop();
+        }
+        if (audioPlayer != null) {
+            try {
+                audioPlayer.stop(); 
+                audioPlayer = null;
+            } catch (Exception e) {
+                System.err.println("Error stopping audio: " + e.getMessage());
             }
-        } catch (Exception e) {
-            System.err.println("Error closing audio player.");
         }
     }
 
     private void gameInit() {
+
+        inGame = true;
+        frame = 0;
+        deaths = 0;
+        scoutKills = 0;
+        wraithKills = 0;
+        juggernautKills = 0;
 
         player = new Player();
 
@@ -183,15 +193,15 @@ public class Scene1 extends JPanel {
         shots = new ArrayList<>();
         bombs = new ArrayList<>();
 
-        // for (int i = 0; i < 4; i++) {
-        // for (int j = 0; j < 6; j++) {
-        // var enemy = new Enemy(ALIEN_INIT_X + (ALIEN_WIDTH + ALIEN_GAP) * j,
-        // ALIEN_INIT_Y + (ALIEN_HEIGHT + ALIEN_GAP) * i);
-        // enemies.add(enemy);
-        // }
-        // }
-        player = new Player();
-        // shot = new Shot();
+        try {
+            if (audioPlayer != null) {
+                audioPlayer.stop();
+            }
+            audioPlayer = new AudioPlayer("src/audio/scene1.wav");
+            audioPlayer.play();
+        } catch (Exception e) {
+            System.err.println("Error playing audio: " + e.getMessage());
+        }
     }
 
     private void drawMap(Graphics g) {
@@ -407,6 +417,35 @@ public class Scene1 extends JPanel {
         g.drawString("Juggernaut Kills: " + juggernautKills, 10, 60);
     }
 
+    private void drawHealthBar(Graphics g) {
+        if (player == null) return;
+
+        int totalHealth = 5;
+        int currentHealth = player.getHealth(); // gets the health (0 to 5)
+
+        // Health Bar position & size
+        int x = 10;
+        int y = 80;
+        int barWidth = 150;
+        int barHeight = 15;
+
+        // 1. Draw Background (Red for missing health)
+        g.setColor(Color.RED);
+        g.fillRect(x, y, barWidth, barHeight);
+
+        // 2. Draw Current Health (Green portion)
+        if (currentHealth > 0) {
+            int currentWidth = (barWidth * currentHealth) / totalHealth;
+            g.setColor(Color.GREEN);
+            g.fillRect(x, y, currentWidth, barHeight);
+        }
+
+        // 3. Draw Outer Border & Text
+        g.setColor(Color.WHITE);
+        g.drawRect(x, y, barWidth, barHeight);
+        g.drawString("HP: " + Math.max(0, currentHealth) + " / " + totalHealth, x + 160, y + 12);
+    }
+
     private void doDrawing(Graphics g) {
 
         g.setColor(Color.black);
@@ -427,6 +466,7 @@ public class Scene1 extends JPanel {
             drawPlayer(g);
             drawShot(g);
             drawKillCounts(g);
+            drawHealthBar(g);
             drawPickupMessage(g);
 
         } else {
@@ -447,9 +487,9 @@ public class Scene1 extends JPanel {
         g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 
         g.setColor(new Color(0, 32, 48));
-        g.fillRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 50);
+        g.fillRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 70);
         g.setColor(Color.white);
-        g.drawRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 50);
+        g.drawRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 70);
 
         var small = new Font("Helvetica", Font.BOLD, 14);
         var fontMetrics = this.getFontMetrics(small);
@@ -457,7 +497,11 @@ public class Scene1 extends JPanel {
         g.setColor(Color.white);
         g.setFont(small);
         g.drawString(message, (BOARD_WIDTH - fontMetrics.stringWidth(message)) / 2,
-                BOARD_WIDTH / 2);
+                BOARD_WIDTH / 2 - 10);
+
+        String restartMsg = "Press SPACE to Restart";
+        g.drawString(restartMsg, (BOARD_WIDTH - fontMetrics.stringWidth(restartMsg)) / 2,
+                BOARD_WIDTH / 2 + 20);
     }
 
     private void update() {
@@ -544,6 +588,7 @@ public class Scene1 extends JPanel {
         }
 
         // Bombs: move them, check collision with player, clean up off-screen ones
+        // Bombs: move them, check collision with player, clean up off-screen ones
         List<Bomb> bombsToRemove = new ArrayList<>();
         for (Bomb bomb : bombs) {
             if (!bomb.isVisible()) {
@@ -564,11 +609,16 @@ public class Scene1 extends JPanel {
                     && bombY >= playerY
                     && bombY <= playerY + PLAYER_HEIGHT) {
 
-                var ii = new ImageIcon(IMG_EXPLOSION);
-                player.setImage(ii.getImage());
-                player.setDying(true);
+                // 1. Subtract health and destroy the bomb
+                player.hit();
                 bomb.die();
                 bombsToRemove.add(bomb);
+
+                // 2. Only change the image to an explosion if health reached 0
+                if (player.isDying()) {
+                    var ii = new ImageIcon(IMG_EXPLOSION);
+                    player.setImage(ii.getImage());
+                }
             } else if (bombX < 0) {
                 bomb.die();
                 bombsToRemove.add(bomb);
@@ -581,6 +631,16 @@ public class Scene1 extends JPanel {
             player.die();
             inGame = false;
             timer.stop();
+            message = "Game Over";
+
+            if (audioPlayer != null) {
+                try {
+                    audioPlayer.stop(); // Stops and closes the audio clip[cite: 16]
+                } catch (Exception e) {
+                    System.err.println("Error stopping audio: " + e.getMessage());
+                }
+            }
+            
             message = "Game Over";
         }
 
@@ -730,24 +790,27 @@ public class Scene1 extends JPanel {
 
         @Override
         public void keyPressed(KeyEvent e) {
-            System.out.println("Scene2.keyPressed: " + e.getKeyCode());
+            int key = e.getKeyCode();
+
+            if (!inGame) {
+                if (key == KeyEvent.VK_SPACE) {
+                    stop();
+                    start();
+                }
+                return;
+            }
 
             player.keyPressed(e);
 
             int x = player.getX();
             int y = player.getY();
 
-            int key = e.getKeyCode();
-
-            if (key == KeyEvent.VK_SPACE && inGame) {
-                System.out.println("Shots: " + shots.size());
+            if (key == KeyEvent.VK_SPACE) {
                 if (shots.size() < player.getMaxShots()) {
-                    // Create a new shot and add it to the list
                     Shot shot = new Shot(x, y);
                     shots.add(shot);
                 }
             }
-
         }
     }
 }

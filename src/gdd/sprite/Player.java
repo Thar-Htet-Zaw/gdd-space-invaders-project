@@ -11,6 +11,8 @@ public class Player extends Sprite {
     private static final int START_Y = 250; // Hardcoded middle Y coordinate
     private int currentSpeed = 4;
     private int maxShots = 4; // matches the game's existing base simultaneous-shot cap
+    
+    private int health = 5;
 
     public Player() {
         initPlayer();
@@ -57,13 +59,23 @@ public class Player extends Sprite {
         return maxShots;
     }
 
-    // In Player.java — exactly like original, just adding vertical velocity (dy)
+    public int getHealth() {
+        return health;
+    }
+
+    public void hit() {
+        health--;
+        if (health <= 0) {
+            setDying(true);
+        }
+    }
+
     @Override
     public void act() {
-        x += dx; // Original horizontal movement[cite: 13]
+        x += dx; // Original horizontal movement
         y += dy; // Added vertical movement
 
-        // Simple boundary checks matching original style[cite: 13]
+        // Simple boundary checks matching original style
         if (y <= 2) {
             y = 2;
         }

@@ -44,7 +44,9 @@ public class Game extends JFrame  {
     public void loadScene1() {
         getContentPane().removeAll();
         add(scene1);
-        if (titleScene != null) titleScene.stop();
+        if (titleScene != null) {
+            titleScene.stop(); 
+        }
         scene1.start();
         revalidate();
         repaint();
