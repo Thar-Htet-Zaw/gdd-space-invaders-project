@@ -165,16 +165,46 @@ public class Scene2 extends JPanel {
             player.act();
         }
 
-        // Update shots
-        for (int i = 0; i < shots.size(); i++) {
-            Shot shot = shots.get(i);
+        // Update shots + check collision with enemies
+        List<Shot> shotsToRemove = new ArrayList<>();
+        for (Shot shot : shots) {
             if (shot.isVisible()) {
-                shot.act();
+                int shotX = shot.getX();
+                int shotY = shot.getY();
+
+                for (Enemy enemy : enemies) {
+                    int enemyX = enemy.getX();
+                    int enemyY = enemy.getY();
+
+                    if (enemy.isVisible() && shot.isVisible()
+                            && shotX >= enemyX
+                            && shotX <= enemyX + ALIEN_WIDTH
+                            && shotY >= enemyY
+                            && shotY <= enemyY + ALIEN_HEIGHT) {
+
+                        boolean enemyDied = enemy.hit();
+                        if (enemyDied) {
+                            deaths++;
+                        }
+                        shot.die();
+                        shotsToRemove.add(shot);
+                    }
+                }
+
+                // Move shot right (mirrors Scene1's approach — shot.act() is unimplemented/throws)
+                int x = shot.getX();
+                x += 20;
+                if (x > BOARD_WIDTH) {
+                    shot.die();
+                    shotsToRemove.add(shot);
+                } else {
+                    shot.setX(x);
+                }
             } else {
-                shots.remove(i);
-                i--;
+                shotsToRemove.add(shot);
             }
         }
+        shots.removeAll(shotsToRemove);
 
         // Update enemies
         for (Enemy enemy : enemies) {

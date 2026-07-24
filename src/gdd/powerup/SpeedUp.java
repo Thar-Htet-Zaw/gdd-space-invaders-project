@@ -12,12 +12,14 @@ import javax.swing.ImageIcon;
 
 public class SpeedUp extends PowerUp {
 
+    private static final int ICON_SIZE = 32; // fixed on-screen size, regardless of source image resolution
+
     public SpeedUp(int x, int y) {
         super(x, y);
         // Set image
         ImageIcon ii = new ImageIcon(IMG_POWERUP_SPEEDUP);
-        var scaledImage = ii.getImage().getScaledInstance(ii.getIconWidth() ,
-                ii.getIconHeight() ,
+        var scaledImage = ii.getImage().getScaledInstance(ICON_SIZE,
+                ICON_SIZE,
                 java.awt.Image.SCALE_SMOOTH);
         setImage(scaledImage);
     }

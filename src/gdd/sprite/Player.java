@@ -10,6 +10,7 @@ public class Player extends Sprite {
     private static final int START_X = 50; 
     private static final int START_Y = 250; // Hardcoded middle Y coordinate
     private int currentSpeed = 4;
+    private int maxShots = 4; // matches the game's existing base simultaneous-shot cap
 
     public Player() {
         initPlayer();
@@ -36,12 +37,24 @@ public class Player extends Sprite {
         return currentSpeed;
     }
 
-    public int setSpeed(int speed) {
+   public int setSpeed(int speed) {
         if (speed < 1) {
             speed = 1;
         }
         this.currentSpeed = speed;
         return currentSpeed;
+    }
+
+    public int getMaxShots() {
+        return maxShots;
+    }
+
+    public int setMaxShots(int maxShots) {
+        if (maxShots < 1) {
+            maxShots = 1;
+        }
+        this.maxShots = maxShots;
+        return maxShots;
     }
 
     // In Player.java — exactly like original, just adding vertical velocity (dy)

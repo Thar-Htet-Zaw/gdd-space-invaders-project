@@ -105,7 +105,7 @@ public class TitleScene extends JPanel {
         g.setColor(Color.LIGHT_GRAY);
         g.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 14));
         
-        String teamText = "Developed by: [Member 1], [Member 2], [Member 3]";
+        String teamText = "Developed by: Phone Khant Aung, Thar Htet Zaw, Han Min Khant Oo";
         int teamWidth = g.getFontMetrics().stringWidth(teamText);
         int teamX = (d.width - teamWidth) / 2;
         

@@ -30,5 +30,10 @@ public class Explosion extends Sprite {
         // this.x += direction;
     }
 
+    @Override
+    public void act() {
+        // Explosions don't move on their own — required only to satisfy Sprite's contract.
+    }
+
 
 }

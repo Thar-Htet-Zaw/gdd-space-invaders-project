@@ -6,11 +6,16 @@ import static gdd.Global.*;
 import gdd.SpawnDetails;
 import gdd.powerup.PowerUp;
 import gdd.powerup.SpeedUp;
+import gdd.powerup.MultiShot;
 import gdd.sprite.Alien1;
+import gdd.sprite.Alien2;
+import gdd.sprite.Alien3;
 import gdd.sprite.Enemy;
+import gdd.sprite.Enemy.Bomb;
 import gdd.sprite.Explosion;
 import gdd.sprite.Player;
 import gdd.sprite.Shot;
+import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -36,6 +41,7 @@ public class Scene1 extends JPanel {
     private List<Enemy> enemies;
     private List<Explosion> explosions;
     private List<Shot> shots;
+    private List<Bomb> bombs;
     private Player player;
     // private Shot shot;
 
@@ -46,6 +52,14 @@ public class Scene1 extends JPanel {
 
     private int direction = -1;
     private int deaths = 0;
+    private int scoutKills = 0;       // Alien1 kills
+    private int wraithKills = 0;      // Alien2 (zigzag) kills
+    private int juggernautKills = 0;  // Alien3 (tank) kills
+
+    private String pickupMessage = null;
+    private int pickupMessageFrame = 0;
+    private static final int PICKUP_MESSAGE_HOLD_FRAMES = 90;  // ~1.5s fully visible
+    private static final int PICKUP_MESSAGE_FADE_FRAMES = 60;  // ~1s fading out
 
     private boolean inGame = true;
     private String message = "Game Over";
@@ -109,17 +123,26 @@ public class Scene1 extends JPanel {
     }
 
     private void loadSpawnDetails() {
-        // Spawning off-screen to the right (X = 720) at different Y heights
-        spawnMap.put(50, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
-        
-        spawnMap.put(100, new SpawnDetails("Alien1", 720, 100));
-        spawnMap.put(150, new SpawnDetails("Alien1", 720, 250));
-        spawnMap.put(200, new SpawnDetails("Alien1", 720, 400));
+        // Power-up spawns first, well before any enemies — gives the player
+        // a clear window to grab it without an enemy arriving at the same time.
+        spawnMap.put(30, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
+        spawnMap.put(2000, new SpawnDetails("PowerUp-MultiShot", 720, 300));
 
-        spawnMap.put(300, new SpawnDetails("Alien1", 720, 150));
-        spawnMap.put(320, new SpawnDetails("Alien1", 720, 250));
-        spawnMap.put(340, new SpawnDetails("Alien1", 720, 350));
-        spawnMap.put(360, new SpawnDetails("Alien1", 720, 450));
+        // Enemy waves: spread across a much longer stretch of frames so the
+        // stage actually lasts several minutes, and so there are comfortably
+        // more enemies available than NUMBER_OF_ALIENS_TO_DESTROY (24) requires.
+        int startFrame = 250;   // ~220-frame buffer after the power-up spawn
+        int frameGap = 150;     // ~2.5 seconds between each enemy at 60 FPS
+        int totalEnemies = 120; // spreads spawns across ~5 minutes of play
+
+        String[] enemyTypes = {"Alien1", "Alien1", "Alien2", "Alien1", "Alien3"};
+
+        for (int i = 0; i < totalEnemies; i++) {
+            int frame = startFrame + i * frameGap;
+            String type = enemyTypes[i % enemyTypes.length];
+            int y = 60 + randomizer.nextInt(500); // keeps enemy fully on-screen vertically
+            spawnMap.put(frame, new SpawnDetails(type, 720, y));
+        }
     }
 
     private void initBoard() {
@@ -158,6 +181,7 @@ public class Scene1 extends JPanel {
         powerups = new ArrayList<>();
         explosions = new ArrayList<>();
         shots = new ArrayList<>();
+        bombs = new ArrayList<>();
 
         // for (int i = 0; i < 4; i++) {
         // for (int j = 0; j < 6; j++) {
@@ -302,6 +326,14 @@ public class Scene1 extends JPanel {
         }
     }
 
+    private void drawBombs(Graphics g) {
+        for (Bomb bomb : bombs) {
+            if (bomb.isVisible()) {
+                g.drawImage(bomb.getImage(), bomb.getX(), bomb.getY(), this);
+            }
+        }
+    }
+
     private void drawBombing(Graphics g) {
 
         // for (Enemy e : enemies) {
@@ -337,6 +369,44 @@ public class Scene1 extends JPanel {
         doDrawing(g);
     }
 
+    private void showPickupMessage(String text) {
+        pickupMessage = text;
+        pickupMessageFrame = 0;
+    }
+
+    private void drawPickupMessage(Graphics g) {
+        if (pickupMessage == null) {
+            return;
+        }
+
+        float alpha;
+        if (pickupMessageFrame <= PICKUP_MESSAGE_HOLD_FRAMES) {
+            alpha = 1.0f; // fully visible during the hold period
+        } else {
+            int fadeProgress = pickupMessageFrame - PICKUP_MESSAGE_HOLD_FRAMES;
+            alpha = 1.0f - ((float) fadeProgress / PICKUP_MESSAGE_FADE_FRAMES);
+            alpha = Math.max(0f, Math.min(1f, alpha));
+        }
+
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+        g2d.setColor(Color.YELLOW);
+        g2d.setFont(new Font("Helvetica", Font.BOLD, 20));
+        var fm = g2d.getFontMetrics();
+        int textWidth = fm.stringWidth(pickupMessage);
+        int x = (BOARD_WIDTH - textWidth) / 2;
+        int y = 100; // below the top HUD text, centered horizontally
+        g2d.drawString(pickupMessage, x, y);
+        g2d.dispose();
+    }
+
+    private void drawKillCounts(Graphics g) {
+        g.setColor(Color.white);
+        g.drawString("Scout Kills: " + scoutKills, 10, 30);
+        g.drawString("Wraith Kills: " + wraithKills, 10, 45);
+        g.drawString("Juggernaut Kills: " + juggernautKills, 10, 60);
+    }
+
     private void doDrawing(Graphics g) {
 
         g.setColor(Color.black);
@@ -353,8 +423,11 @@ public class Scene1 extends JPanel {
             drawExplosions(g);
             drawPowreUps(g);
             drawAliens(g);
+            drawBombs(g);
             drawPlayer(g);
             drawShot(g);
+            drawKillCounts(g);
+            drawPickupMessage(g);
 
         } else {
 
@@ -401,13 +474,21 @@ public class Scene1 extends JPanel {
                     break;
                 // Add more cases for different enemy types if needed
                 case "Alien2":
-                    // Enemy enemy2 = new Alien2(sd.x, sd.y);
-                    // enemies.add(enemy2);
+                    Enemy enemy2 = new Alien2(sd.x, sd.y);
+                    enemies.add(enemy2);
+                    break;
+                case "Alien3":
+                    Enemy enemy3 = new Alien3(sd.x, sd.y);
+                    enemies.add(enemy3);
                     break;
                 case "PowerUp-SpeedUp":
                     // Handle speed up item spawn
                     PowerUp speedUp = new SpeedUp(sd.x, sd.y);
                     powerups.add(speedUp);
+                    break;
+                case "PowerUp-MultiShot":
+                    PowerUp multiShot = new MultiShot(sd.x, sd.y);
+                    powerups.add(multiShot);
                     break;
                 default:
                     System.out.println("Unknown enemy type: " + sd.type);
@@ -430,7 +511,22 @@ public class Scene1 extends JPanel {
                 powerup.act();
                 if (powerup.collidesWith(player)) {
                     powerup.upgrade(player);
+
+                    if (powerup instanceof SpeedUp) {
+                        showPickupMessage("Speed Increased!");
+                    } else if (powerup instanceof MultiShot) {
+                        showPickupMessage("Obtained Multi-Shot!");
+                    }
                 }
+            }
+        }
+
+        // Pickup message countdown (hold, then fade, then clear)
+        if (pickupMessage != null) {
+            pickupMessageFrame++;
+            if (pickupMessageFrame > PICKUP_MESSAGE_HOLD_FRAMES + PICKUP_MESSAGE_FADE_FRAMES) {
+                pickupMessage = null;
+                pickupMessageFrame = 0;
             }
         }
 
@@ -438,7 +534,54 @@ public class Scene1 extends JPanel {
         for (Enemy enemy : enemies) {
             if (enemy.isVisible()) {
                 enemy.act(direction);
+
+                // Roll the odds for this enemy to drop a bomb this frame
+                Bomb newBomb = enemy.maybeDropBomb();
+                if (newBomb != null) {
+                    bombs.add(newBomb);
+                }
             }
+        }
+
+        // Bombs: move them, check collision with player, clean up off-screen ones
+        List<Bomb> bombsToRemove = new ArrayList<>();
+        for (Bomb bomb : bombs) {
+            if (!bomb.isVisible()) {
+                bombsToRemove.add(bomb);
+                continue;
+            }
+
+            bomb.act();
+
+            int bombX = bomb.getX();
+            int bombY = bomb.getY();
+            int playerX = player.getX();
+            int playerY = player.getY();
+
+            if (player.isVisible()
+                    && bombX >= playerX
+                    && bombX <= playerX + PLAYER_WIDTH
+                    && bombY >= playerY
+                    && bombY <= playerY + PLAYER_HEIGHT) {
+
+                var ii = new ImageIcon(IMG_EXPLOSION);
+                player.setImage(ii.getImage());
+                player.setDying(true);
+                bomb.die();
+                bombsToRemove.add(bomb);
+            } else if (bombX < 0) {
+                bomb.die();
+                bombsToRemove.add(bomb);
+            }
+        }
+        bombs.removeAll(bombsToRemove);
+
+        // Player death from a bomb hit ends the stage, matching Scene2's game-over pattern
+        if (player.isDying()) {
+            player.die();
+            inGame = false;
+            timer.stop();
+            message = "Game Over";
         }
 
         // shot
@@ -460,12 +603,24 @@ public class Scene1 extends JPanel {
                             && shotY >= (enemyY)
                             && shotY <= (enemyY + ALIEN_HEIGHT)) {
 
-                        var ii = new ImageIcon(IMG_EXPLOSION);
-                        enemy.setImage(ii.getImage());
-                        enemy.setDying(true);
-                        explosions.add(new Explosion(enemyX, enemyY));
-                        deaths++;
-                        shot.die();
+                        boolean enemyDied = enemy.hit(); // decrements HP; true only when HP hits 0
+
+                        if (enemyDied) {
+                            var ii = new ImageIcon(IMG_EXPLOSION);
+                            enemy.setImage(ii.getImage());
+                            explosions.add(new Explosion(enemyX, enemyY));
+                            deaths++;
+
+                            if (enemy instanceof Alien3) {
+                                juggernautKills++;
+                            } else if (enemy instanceof Alien2) {
+                                wraithKills++;
+                            } else if (enemy instanceof Alien1) {
+                                scoutKills++;
+                            }
+                        }
+
+                        shot.die(); // shot is consumed on impact either way
                         shotsToRemove.add(shot);
                     }
                 }
@@ -586,7 +741,7 @@ public class Scene1 extends JPanel {
 
             if (key == KeyEvent.VK_SPACE && inGame) {
                 System.out.println("Shots: " + shots.size());
-                if (shots.size() < 4) {
+                if (shots.size() < player.getMaxShots()) {
                     // Create a new shot and add it to the list
                     Shot shot = new Shot(x, y);
                     shots.add(shot);

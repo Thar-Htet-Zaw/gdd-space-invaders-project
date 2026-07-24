@@ -1,6 +1,7 @@
 package gdd.sprite;
 
 import static gdd.Global.*;
+import java.util.Random;
 import javax.swing.ImageIcon;
 
 public class Enemy extends Sprite {
@@ -31,6 +32,70 @@ public class Enemy extends Sprite {
     public void act(int direction) {
 
         this.x += direction;
+    }
+
+    @Override
+    public void act() {
+        // not used — Enemy movement is driven by act(int direction) instead.
+        // This empty method exists only to satisfy Sprite's abstract contract.
+    }
+
+    protected int hitPoints = 1; // default = dies in one hit, matches current game behavior
+
+    public void setHitPoints(int hitPoints) {
+        this.hitPoints = hitPoints;
+    }
+
+    public int getHitPoints() {
+        return hitPoints;
+    }
+
+    public boolean hit() {
+        hitPoints--;
+        if (hitPoints <= 0) {
+            setDying(true);
+            return true;  // enemy has died
+        }
+        return false;      // enemy survived this hit
+    }
+
+    private static final Random bombRandomizer = new Random();
+    private static final int BOMB_CHANCE_RANGE = 300; // ~1-in-300 odds per enemy, per frame
+
+    /**
+     * Rolls the odds for this enemy to drop a bomb this frame.
+     * Returns a new Bomb positioned at this enemy's location, or null if it didn't roll.
+     */
+    public Bomb maybeDropBomb() {
+        if (!isVisible()) {
+            return null;
+        }
+        if (bombRandomizer.nextInt(BOMB_CHANCE_RANGE) == 0) {
+            return new Bomb(this.x, this.y);
+        }
+        return null;
+    }
+
+   public class Bomb extends Sprite {
+
+        private static final int SPEED = 4;
+
+        public Bomb(int x, int y) {
+            this.x = x;
+            this.y = y;
+
+            var ii = new ImageIcon(IMG_BOMB);
+            var scaledImage = ii.getImage().getScaledInstance(
+                    ii.getIconWidth() * SCALE_FACTOR,
+                    ii.getIconHeight() * SCALE_FACTOR,
+                    java.awt.Image.SCALE_SMOOTH);
+            setImage(scaledImage);
+        }
+
+        @Override
+        public void act() {
+            this.x -= SPEED; // fires leftward toward the player, mirroring Shot's rightward flight
+        }
     }
 /* 
     public Bomb getBomb() {
