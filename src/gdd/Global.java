@@ -37,4 +37,12 @@ public class Global {
     public static final String IMG_POWERUP_SPEEDUP = "src/images/powerup-s.png";
     public static final String IMG_POWERUP_MULTISHOT = "src/images/powerup-m.png";
     public static final String IMG_BOMB = "src/images/bomb.png";
+
+    // Audio Files
+    public static final String AUD_TITLE = "src/audio/title.wav";
+    public static final String AUD_SCENE1 = "src/audio/scene1.wav";
+    public static final String AUD_FIRE = "src/audio/fire.wav";
+    public static final String AUD_EXPLODE = "src/audio/explode.wav";
+    public static final String AUD_GAMEOVER = "src/audio/gameover-sound.wav";
+    public static final String AUD_LEVEL_UP = "src/audio/level-up.wav";
 }
