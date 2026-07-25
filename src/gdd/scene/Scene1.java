@@ -22,10 +22,13 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.Graphics;
 import java.awt.Toolkit;
+import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,6 +66,13 @@ public class Scene1 extends JPanel {
 
     private boolean inGame = true;
     private String message = "Game Over";
+
+    // --- Stage 1 dashboard ---
+    private long score = 0;
+    private int shotsFired = 0;
+    private boolean showDashboard = false;
+    private static final int STAGE_DURATION_FRAMES = 5 * 60 * 60; // 5 minutes of survival @ 60 FPS
+    private Rectangle continueButtonBounds;
 
     private final Dimension d = new Dimension(BOARD_WIDTH, BOARD_HEIGHT);
     private final Random randomizer = new Random();
@@ -122,26 +132,106 @@ public class Scene1 extends JPanel {
         }
     }
 
+    // --- Enemy formation templates ---
+    // Each entry is {dx, dy}: dx is how much further off-screen (to the right) that member
+    // spawns, dy is its vertical offset from the wave's base Y. Because every enemy in a
+    // formation is the SAME type (so they all move at the same speed), these offsets stay
+    // fixed relative to each other the whole time they cross the screen — the shape holds.
+    private static final int[][] FORMATION_V_SMALL = {
+        {0, 0}, {45, -45}, {45, 45}
+    };
+    private static final int[][] FORMATION_V_LARGE = {
+        {0, 0}, {45, -45}, {45, 45}, {90, -90}, {90, 90}
+    };
+    private static final int[][] FORMATION_WALL_SMALL = {
+        {0, -50}, {0, 0}, {0, 50}
+    };
+    private static final int[][] FORMATION_WALL_LARGE = {
+        {0, -100}, {0, -50}, {0, 0}, {0, 50}, {0, 100}
+    };
+    private static final int[][] FORMATION_DIAGONAL_SMALL = {
+        {0, -50}, {60, 0}, {120, 50}
+    };
+    private static final int[][] FORMATION_DIAGONAL_LARGE = {
+        {0, -100}, {50, -50}, {100, 0}, {150, 50}, {200, 100}
+    };
+    private static final int[][][] SMALL_FORMATIONS = {
+        FORMATION_V_SMALL, FORMATION_WALL_SMALL, FORMATION_DIAGONAL_SMALL
+    };
+    private static final int[][][] LARGE_FORMATIONS = {
+        FORMATION_V_LARGE, FORMATION_WALL_LARGE, FORMATION_DIAGONAL_LARGE
+    };
+
     private void loadSpawnDetails() {
         // Power-up spawns first, well before any enemies — gives the player
         // a clear window to grab it without an enemy arriving at the same time.
         spawnMap.put(30, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
-        spawnMap.put(2000, new SpawnDetails("PowerUp-MultiShot", 720, 300));
+        spawnMap.put(1600, new SpawnDetails("PowerUp-MultiShot", 720, 300));
 
-        // Enemy waves: spread across a much longer stretch of frames so the
-        // stage actually lasts several minutes, and so there are comfortably
-        // more enemies available than NUMBER_OF_ALIENS_TO_DESTROY (24) requires.
-        int startFrame = 250;   // ~220-frame buffer after the power-up spawn
-        int frameGap = 150;     // ~2.5 seconds between each enemy at 60 FPS
-        int totalEnemies = 120; // spreads spawns across ~5 minutes of play
+        // --- Formation-based enemy spawning ---
+        // Instead of lone enemies trickling in, enemies now spawn together in tight,
+        // recognizable formations (a V, a wall, a diagonal line) that cross the screen
+        // as a group. Early waves use smaller 3-enemy formations of easy Scouts; later
+        // waves use bigger 5-enemy formations and tougher enemy types, and the breather
+        // between waves shrinks over time so the stage keeps ramping up.
+        int numberOfWaves = 95;
+        int frameCursor = 300; // small buffer before the first wave starts
 
-        String[] enemyTypes = {"Alien1", "Alien1", "Alien2", "Alien1", "Alien3"};
+        for (int wave = 0; wave < numberOfWaves; wave++) {
+            boolean useLargeFormation = wave >= 25;
+            int[][][] formationSet = useLargeFormation ? LARGE_FORMATIONS : SMALL_FORMATIONS;
+            int[][] formation = formationSet[wave % formationSet.length];
 
-        for (int i = 0; i < totalEnemies; i++) {
-            int frame = startFrame + i * frameGap;
-            String type = enemyTypes[i % enemyTypes.length];
-            int y = 60 + randomizer.nextInt(500); // keeps enemy fully on-screen vertically
-            spawnMap.put(frame, new SpawnDetails(type, 720, y));
+            String enemyType = pickEnemyTypeForWave(wave);
+            // Base Y clamped so every member of the formation (offsets up to +-100) stays
+            // fully on-screen vertically.
+            int baseY = 160 + randomizer.nextInt(300);
+
+            for (int i = 0; i < formation.length; i++) {
+                int dx = formation[i][0];
+                int dy = formation[i][1];
+                // The +i is just to keep HashMap keys unique — it's 1 frame apart at most,
+                // so it doesn't noticeably affect the formation's timing. The dx offset
+                // (spawning further off-screen) is what creates the staggered, shaped entry.
+                spawnMap.put(frameCursor + i, new SpawnDetails(enemyType, 720 + dx, baseY + dy));
+            }
+
+            int lullAfterWave = Math.max(120, 400 - wave * 8); // shrinks from ~6.7s to ~2s
+
+            // Randomly sneak a lone enemy into the lull, at an unpredictable moment, so
+            // the breather between formations isn't 100% safe/telegraphed every time.
+            int loneSpawnChance = 55; // % chance per wave
+            if (lullAfterWave > 60 && randomizer.nextInt(100) < loneSpawnChance) {
+                int loneOffset = formation.length + randomizer.nextInt(lullAfterWave);
+                int loneFrame = frameCursor + loneOffset;
+                String loneType = pickEnemyTypeForWave(wave);
+                int loneY = 60 + randomizer.nextInt(500);
+                spawnMap.put(loneFrame, new SpawnDetails(loneType, 720, loneY));
+            }
+
+            frameCursor += formation.length + lullAfterWave;
+        }
+    }
+
+    /**
+     * Picks a single enemy type to use for an entire formation. Early waves lean almost
+     * entirely on Alien1 (fast, fragile "Scouts"). Later waves mix in more Alien2
+     * ("Wraiths", zigzag movement) and Alien3 ("Juggernauts", tanky) so the stage
+     * escalates smoothly. Using one type per formation keeps the shape intact, since
+     * mixing enemy types with different speeds would stretch the formation apart.
+     */
+    private String pickEnemyTypeForWave(int wave) {
+        int roll = randomizer.nextInt(100);
+
+        int juggernautChance = Math.min(40, wave * 3);    // grows from 0% to ~40%
+        int wraithChance = Math.min(40, 10 + wave * 2);   // grows from ~10% to ~40%
+
+        if (roll < juggernautChance) {
+            return "Alien3";
+        } else if (roll < juggernautChance + wraithChance) {
+            return "Alien2";
+        } else {
+            return "Alien1";
         }
     }
 
@@ -151,6 +241,7 @@ public class Scene1 extends JPanel {
 
     public void start() {
         addKeyListener(new TAdapter());
+        addMouseListener(new MAdapter());
         setFocusable(true);
         requestFocusInWindow();
         setBackground(Color.black);
@@ -179,11 +270,14 @@ public class Scene1 extends JPanel {
     private void gameInit() {
 
         inGame = true;
+        showDashboard = false;
         frame = 0;
         deaths = 0;
         scoutKills = 0;
         wraithKills = 0;
         juggernautKills = 0;
+        score = 0;
+        shotsFired = 0;
 
         player = new Player();
 
@@ -417,6 +511,33 @@ public class Scene1 extends JPanel {
         g.drawString("Juggernaut Kills: " + juggernautKills, 10, 60);
     }
 
+    private void drawTimer(Graphics g) {
+        int framesElapsed = Math.min(frame, STAGE_DURATION_FRAMES);
+        int framesLeft = STAGE_DURATION_FRAMES - framesElapsed;
+        String timeText = "Time: " + formatTime(framesElapsed);
+
+        var timerFont = new Font("Helvetica", Font.BOLD, 18);
+        g.setFont(timerFont);
+        var fm = g.getFontMetrics(timerFont);
+
+        // Flash red in the last 10 seconds to warn the player
+        if (framesLeft <= 10 * 60) {
+            g.setColor(frame % 30 < 15 ? Color.RED : Color.WHITE);
+        } else {
+            g.setColor(Color.WHITE);
+        }
+
+        g.drawString(timeText, BOARD_WIDTH - fm.stringWidth(timeText) - 10, 25);
+
+        // Also show current score in the same corner, right under the timer
+        g.setColor(Color.WHITE);
+        var scoreFont = new Font("Helvetica", Font.PLAIN, 14);
+        g.setFont(scoreFont);
+        var fmScore = g.getFontMetrics(scoreFont);
+        String scoreText = "Score: " + score;
+        g.drawString(scoreText, BOARD_WIDTH - fmScore.stringWidth(scoreText) - 10, 45);
+    }
+
     private void drawHealthBar(Graphics g) {
         if (player == null) return;
 
@@ -468,6 +589,15 @@ public class Scene1 extends JPanel {
             drawKillCounts(g);
             drawHealthBar(g);
             drawPickupMessage(g);
+            drawTimer(g);
+
+        } else if (showDashboard) {
+
+            if (timer.isRunning()) {
+                timer.stop();
+            }
+
+            drawDashboard(g);
 
         } else {
 
@@ -479,6 +609,94 @@ public class Scene1 extends JPanel {
         }
 
         Toolkit.getDefaultToolkit().sync();
+    }
+
+    private String formatTime(int frames) {
+        int totalSeconds = frames / 60; // timer runs at 60 FPS
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%d:%02d", minutes, seconds);
+    }
+
+    private void drawDashboard(Graphics g) {
+
+        g.setColor(Color.black);
+        g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+
+        int panelX = 80;
+        int panelY = 120;
+        int panelWidth = BOARD_WIDTH - 160;
+        int panelHeight = 380;
+
+        g.setColor(new Color(0, 32, 48));
+        g.fillRect(panelX, panelY, panelWidth, panelHeight);
+        g.setColor(Color.white);
+        g.drawRect(panelX, panelY, panelWidth, panelHeight);
+
+        var titleFont = new Font("Helvetica", Font.BOLD, 22);
+        var labelFont = new Font("Helvetica", Font.PLAIN, 16);
+        var fmTitle = this.getFontMetrics(titleFont);
+
+        String title = "STAGE 1 COMPLETE!";
+        g.setColor(Color.YELLOW);
+        g.setFont(titleFont);
+        g.drawString(title, panelX + (panelWidth - fmTitle.stringWidth(title)) / 2, panelY + 40);
+
+        int totalKills = scoutKills + wraithKills + juggernautKills;
+        int accuracy = shotsFired > 0 ? Math.min(100, (int) (100.0 * totalKills / shotsFired)) : 0;
+
+        g.setColor(Color.white);
+        g.setFont(labelFont);
+        int lineX = panelX + 30;
+        int lineY = panelY + 85;
+        int lineGap = 28;
+
+        g.drawString("Score: " + score, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Time Survived: " + formatTime(frame), lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Total Enemies Destroyed: " + totalKills, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("  Scout Kills: " + scoutKills, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("  Wraith Kills: " + wraithKills, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("  Juggernaut Kills: " + juggernautKills, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Shots Fired: " + shotsFired + "   Accuracy: " + accuracy + "%", lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Health Remaining: " + Math.max(0, player.getHealth()) + " / 5", lineX, lineY);
+
+        // Continue button
+        int buttonWidth = 220;
+        int buttonHeight = 45;
+        int buttonX = panelX + (panelWidth - buttonWidth) / 2;
+        int buttonY = panelY + panelHeight - 70;
+
+        continueButtonBounds = new Rectangle(buttonX, buttonY, buttonWidth, buttonHeight);
+
+        g.setColor(new Color(0, 90, 40));
+        g.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+        g.setColor(Color.white);
+        g.drawRect(buttonX, buttonY, buttonWidth, buttonHeight);
+
+        String buttonText = "CONTINUE TO STAGE 2";
+        var fmButton = this.getFontMetrics(labelFont);
+        g.drawString(buttonText,
+                buttonX + (buttonWidth - fmButton.stringWidth(buttonText)) / 2,
+                buttonY + buttonHeight / 2 + 5);
+
+        String hint = "(click Continue, or press ENTER)";
+        var small = new Font("Helvetica", Font.PLAIN, 12);
+        g.setFont(small);
+        g.setColor(Color.LIGHT_GRAY);
+        var fmHint = this.getFontMetrics(small);
+        g.drawString(hint, panelX + (panelWidth - fmHint.stringWidth(hint)) / 2, buttonY + buttonHeight + 20);
+    }
+
+    private void proceedToScene2() {
+        stop();
+        game.loadScene2();
     }
 
     private void gameOver(Graphics g) {
@@ -540,10 +758,18 @@ public class Scene1 extends JPanel {
             }
         }
 
-        if (deaths == NUMBER_OF_ALIENS_TO_DESTROY) {
+        if (inGame && frame >= STAGE_DURATION_FRAMES) {
             inGame = false;
+            showDashboard = true;
             timer.stop();
-            game.loadScene2();
+
+            if (audioPlayer != null) {
+                try {
+                    audioPlayer.stop();
+                } catch (Exception e) {
+                    System.err.println("Error stopping audio: " + e.getMessage());
+                }
+            }
         }
 
         // player
@@ -673,10 +899,13 @@ public class Scene1 extends JPanel {
 
                             if (enemy instanceof Alien3) {
                                 juggernautKills++;
+                                score += 300;
                             } else if (enemy instanceof Alien2) {
                                 wraithKills++;
+                                score += 150;
                             } else if (enemy instanceof Alien1) {
                                 scoutKills++;
+                                score += 100;
                             }
                         }
 
@@ -793,6 +1022,12 @@ public class Scene1 extends JPanel {
             int key = e.getKeyCode();
 
             if (!inGame) {
+                if (showDashboard) {
+                    if (key == KeyEvent.VK_ENTER || key == KeyEvent.VK_SPACE) {
+                        proceedToScene2();
+                    }
+                    return;
+                }
                 if (key == KeyEvent.VK_SPACE) {
                     stop();
                     start();
@@ -809,7 +1044,19 @@ public class Scene1 extends JPanel {
                 if (shots.size() < player.getMaxShots()) {
                     Shot shot = new Shot(x, y);
                     shots.add(shot);
+                    shotsFired++;
                 }
+            }
+        }
+    }
+
+    private class MAdapter extends MouseAdapter {
+
+        @Override
+        public void mouseClicked(MouseEvent e) {
+            if (showDashboard && continueButtonBounds != null
+                    && continueButtonBounds.contains(e.getPoint())) {
+                proceedToScene2();
             }
         }
     }
