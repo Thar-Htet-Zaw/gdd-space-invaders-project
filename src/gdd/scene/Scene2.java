@@ -2,8 +2,15 @@ package gdd.scene;
 
 import gdd.AudioPlayer;
 import gdd.Game;
+import gdd.Global;
 import static gdd.Global.*;
+import gdd.SpawnDetails;
+import gdd.sprite.Alien1;
+import gdd.sprite.Alien2;
+import gdd.sprite.Alien3;
+import gdd.sprite.Boss;
 import gdd.sprite.Enemy;
+import gdd.sprite.Enemy.Bomb;
 import gdd.sprite.Player;
 import gdd.sprite.Shot;
 
@@ -11,26 +18,75 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Random;
+import javax.swing.ImageIcon;
 import javax.swing.JPanel;
 import javax.swing.Timer;
 
 public class Scene2 extends JPanel {
 
+    private static final String BOSS_NAME = "THE HARBINGER";
+
     private Dimension d;
     private List<Enemy> enemies;
     private Player player;
     private List<Shot> shots;
+    private List<Bomb> bombs;
 
+    private int frame = 0;
     private int deaths = 0;
+    private int scoutKills = 0;
+    private int wraithKills = 0;
+    private int juggernautKills = 0;
+    private long score = 0;
     private boolean inGame = true;
     private String message = "Game Over";
+
+    private final Random randomizer = new Random();
+    private HashMap<Integer, SpawnDetails> spawnMap = new HashMap<>();
+    private static final int BOSS_HIT_POINTS = 40;
+    private int bossSpawnFrame;
+    private static final int WARNING_DURATION_FRAMES = 180; // ~3s flickering warning before boss arrives
+
+    // Danger-zone background theme: same scrolling mechanism as Scene1's
+    // starfield, but a distinct warm-color hazard motif instead of white stars.
+    final int BLOCKHEIGHT = 50;
+    final int BLOCKWIDTH = 50;
+    private final int[][] MAP = {
+        {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+        {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+    };
 
     private Timer timer;
     private Game game;
@@ -38,6 +94,7 @@ public class Scene2 extends JPanel {
     public Scene2(Game game) {
         this.game = game;
         initBoard();
+        loadSpawnDetails();
         gameInit();
     }
 
@@ -60,19 +117,89 @@ public class Scene2 extends JPanel {
         }
     }
 
-    private void gameInit() {
-        enemies = new ArrayList<>();
+    private void loadSpawnDetails() {
+        int frameCursor = 100;
 
-        // Stage 2 setup (e.g., higher difficulty or Boss enemy layout)
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 6; j++) {
-                var enemy = new Enemy(ALIEN_INIT_X + 40 * j, ALIEN_INIT_Y + 40 * i);
-                enemies.add(enemy);
-            }
+        // Wave 1: Scouts (Alien1)
+        for (int i = 0; i < 8; i++) {
+            spawnMap.put(frameCursor, new SpawnDetails("Alien1", 720, 60 + randomizer.nextInt(500)));
+            frameCursor += 150;
         }
 
-        player = new Player();
+        frameCursor += 200; // brief breather before the next wave
+
+        // Wave 2: Wraiths (Alien2, zigzag)
+        for (int i = 0; i < 8; i++) {
+            spawnMap.put(frameCursor, new SpawnDetails("Alien2", 720, 60 + randomizer.nextInt(500)));
+            frameCursor += 150;
+        }
+
+        frameCursor += 200;
+
+        // Wave 3: Juggernauts (Alien3, tank)
+        for (int i = 0; i < 6; i++) {
+            spawnMap.put(frameCursor, new SpawnDetails("Alien3", 720, 60 + randomizer.nextInt(500)));
+            frameCursor += 200;
+        }
+
+        frameCursor += 300; // dramatic pause before the boss
+
+        bossSpawnFrame = frameCursor;
+        spawnMap.put(frameCursor, new SpawnDetails("Boss", 720, 300));
+    }
+
+    private void gameInit() {
+        enemies = new ArrayList<>();
         shots = new ArrayList<>();
+        bombs = new ArrayList<>();
+        player = new Player();
+    }
+
+    private void restartStage() {
+        frame = 0;
+        deaths = 0;
+        scoutKills = 0;
+        wraithKills = 0;
+        juggernautKills = 0;
+        score = 0;
+        inGame = true;
+        message = "Game Over";
+        gameInit(); // spawnMap itself is untouched and reused correctly since frame resets to 0
+        timer.start();
+    }
+
+    private void drawMap(Graphics g) {
+        int scrollOffset = (frame) % BLOCKWIDTH;
+        int baseCol = (frame) / BLOCKWIDTH;
+        int colsNeeded = (BOARD_WIDTH / BLOCKWIDTH) + 2;
+
+        for (int screenCol = 0; screenCol < colsNeeded; screenCol++) {
+            int mapCol = (baseCol + screenCol) % MAP[0].length;
+            int x = BOARD_WIDTH - ((screenCol * BLOCKWIDTH) - scrollOffset);
+
+            if (x > BOARD_WIDTH || x < -BLOCKWIDTH) {
+                continue;
+            }
+
+            for (int row = 0; row < MAP.length; row++) {
+                if (MAP[row][mapCol] == 1) {
+                    int y = row * BLOCKHEIGHT;
+                    drawHazardCluster(g, x, y, BLOCKWIDTH, BLOCKHEIGHT);
+                }
+            }
+        }
+    }
+
+    private void drawHazardCluster(Graphics g, int x, int y, int width, int height) {
+        int centerX = x + width / 2;
+        int centerY = y + height / 2;
+
+        g.setColor(new Color(255, 100, 0));
+        g.fillRect(centerX - 2, centerY - 2, 4, 4);
+
+        g.setColor(new Color(200, 40, 0));
+        g.fillRect(centerX - 7, centerY - 7, 3, 3);
+        g.fillRect(centerX + 5, centerY + 4, 3, 3);
     }
 
     private void drawEnemies(Graphics g) {
@@ -87,23 +214,178 @@ public class Scene2 extends JPanel {
         }
     }
 
+    private void drawBombs(Graphics g) {
+        for (Bomb bomb : bombs) {
+            if (bomb.isVisible()) {
+                g.drawImage(bomb.getImage(), bomb.getX(), bomb.getY(), this);
+            }
+        }
+    }
+
     private void drawPlayer(Graphics g) {
         if (player != null && player.isVisible()) {
-            g.drawImage(player.getImage(), player.getX(), player.getY(), this);
-        }
+            Graphics2D g2d = (Graphics2D) g.create();
 
-        if (player.isDying()) {
-            player.die();
-            inGame = false;
+            int x = player.getX();
+            int y = player.getY();
+            int width = player.getImage().getWidth(null);
+            int height = player.getImage().getHeight(null);
+
+            // Rotate to face right, matching Scene1's orientation fix
+            g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
+            g2d.drawImage(player.getImage(), x, y, this);
+            g2d.dispose();
         }
     }
 
     private void drawShots(Graphics g) {
         for (Shot shot : shots) {
-            if (shot != null && shot.isVisible()) {
-                g.drawImage(shot.getImage(), shot.getX(), shot.getY(), this);
+            if (shot.isVisible()) {
+                Graphics2D g2d = (Graphics2D) g.create();
+
+                int x = shot.getX();
+                int y = shot.getY();
+                int width = shot.getImage().getWidth(null);
+                int height = shot.getImage().getHeight(null);
+
+                g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
+                g2d.drawImage(shot.getImage(), x, y, this);
+                g2d.dispose();
             }
         }
+    }
+
+    private void drawHealthBar(Graphics g) {
+        if (player == null) {
+            return;
+        }
+
+        int totalHealth = 5;
+        int currentHealth = player.getHealth();
+
+        int x = 10;
+        int y = 40;
+        int barWidth = 150;
+        int barHeight = 15;
+
+        g.setColor(Color.RED);
+        g.fillRect(x, y, barWidth, barHeight);
+
+        if (currentHealth > 0) {
+            int currentWidth = (barWidth * currentHealth) / totalHealth;
+            g.setColor(Color.GREEN);
+            g.fillRect(x, y, currentWidth, barHeight);
+        }
+
+        g.setColor(Color.WHITE);
+        g.drawRect(x, y, barWidth, barHeight);
+        g.drawString("HP: " + Math.max(0, currentHealth) + " / " + totalHealth, x + 160, y + 12);
+    }
+
+    private void drawBossHealthBar(Graphics g) {
+        Boss boss = findBoss();
+        if (boss == null || !boss.isVisible()) {
+            return;
+        }
+
+        int barWidth = 400;
+        int barHeight = 20;
+        int x = (BOARD_WIDTH - barWidth) / 2;
+        int y = 75; // below the player HP bar's row (40-55), so they never overlap
+
+        int currentHp = Math.max(0, boss.getHitPoints());
+        int maxHp = BOSS_HIT_POINTS;
+
+        g.setColor(Color.RED);
+        g.fillRect(x, y, barWidth, barHeight);
+
+        g.setColor(boss.isPhaseTwo() ? new Color(255, 140, 0) : Color.MAGENTA);
+        int currentWidth = (barWidth * currentHp) / maxHp;
+        g.fillRect(x, y, currentWidth, barHeight);
+
+        g.setColor(Color.WHITE);
+        g.drawRect(x, y, barWidth, barHeight);
+
+        String label = boss.isPhaseTwo() ? BOSS_NAME + " (ENRAGED)" : BOSS_NAME;
+        var font = new Font("Helvetica", Font.BOLD, 14);
+        g.setFont(font);
+        var fm = g.getFontMetrics(font);
+        g.drawString(label, (BOARD_WIDTH - fm.stringWidth(label)) / 2, y - 5);
+    }
+
+    private void drawStatusHUD(Graphics g) {
+        // Kill breakdown, bottom-left of the health bars
+        g.setColor(Color.WHITE);
+        var small = new Font("Helvetica", Font.PLAIN, 13);
+        g.setFont(small);
+        g.drawString("Scout Kills: " + scoutKills, 10, 110);
+        g.drawString("Wraith Kills: " + wraithKills, 10, 125);
+        g.drawString("Juggernaut Kills: " + juggernautKills, 10, 140);
+
+        // Time + score, top-right corner
+        var timerFont = new Font("Helvetica", Font.BOLD, 18);
+        g.setFont(timerFont);
+        var fmTimer = g.getFontMetrics(timerFont);
+        String timeText = "Time: " + formatTime(frame);
+        g.setColor(Color.WHITE);
+        g.drawString(timeText, BOARD_WIDTH - fmTimer.stringWidth(timeText) - 10, 20);
+
+        var scoreFont = new Font("Helvetica", Font.PLAIN, 14);
+        g.setFont(scoreFont);
+        var fmScore = g.getFontMetrics(scoreFont);
+        String scoreText = "Score: " + score;
+        g.drawString(scoreText, BOARD_WIDTH - fmScore.stringWidth(scoreText) - 10, 40);
+    }
+
+    private String formatTime(int frames) {
+        int totalSeconds = frames / 60;
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%d:%02d", minutes, seconds);
+    }
+
+    private void drawBossWarning(Graphics g) {
+        int warningStart = bossSpawnFrame - WARNING_DURATION_FRAMES;
+        if (frame < warningStart || frame >= bossSpawnFrame) {
+            return;
+        }
+
+        if (frame % 20 < 10) { // flicker
+            String warning = "WARNING: " + BOSS_NAME + " IS COMING!";
+            var font = new Font("Helvetica", Font.BOLD, 26);
+            g.setFont(font);
+            g.setColor(Color.RED);
+            var fm = g.getFontMetrics(font);
+            g.drawString(warning, (BOARD_WIDTH - fm.stringWidth(warning)) / 2, BOARD_HEIGHT / 2 - 100);
+        }
+    }
+
+    private void drawBossLaser(Graphics g) {
+        Boss boss = findBoss();
+        if (boss == null || !boss.isVisible()) {
+            return;
+        }
+
+        if (boss.isChargingLaser()) {
+            // Telegraph: flashing warning band at the target row, so the player can dodge in time
+            if (frame % 10 < 5) {
+                g.setColor(new Color(255, 0, 0, 120));
+                g.fillRect(0, boss.getLaserTargetY() - Boss.LASER_HEIGHT / 2, BOARD_WIDTH, Boss.LASER_HEIGHT);
+            }
+        } else if (boss.isFiringLaser()) {
+            // Full-strength active beam
+            g.setColor(new Color(255, 60, 0, 220));
+            g.fillRect(0, boss.getLaserTargetY() - Boss.LASER_HEIGHT / 2, BOARD_WIDTH, Boss.LASER_HEIGHT);
+        }
+    }
+
+    private Boss findBoss() {
+        for (Enemy enemy : enemies) {
+            if (enemy instanceof Boss) {
+                return (Boss) enemy;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -118,13 +400,20 @@ public class Scene2 extends JPanel {
         g.fillRect(0, 0, d.width, d.height);
 
         if (inGame) {
-            // Draw Stage 2 banner indicator
+            drawMap(g);
+
             g.setColor(Color.WHITE);
             g.drawString("STAGE 2 - FINAL STAGE", 10, 20);
 
             drawEnemies(g);
+            drawBombs(g);
+            drawBossLaser(g);
             drawPlayer(g);
             drawShots(g);
+            drawHealthBar(g);
+            drawBossHealthBar(g);
+            drawStatusHUD(g);
+            drawBossWarning(g);
         } else {
             if (timer.isRunning()) {
                 timer.stop();
@@ -141,9 +430,9 @@ public class Scene2 extends JPanel {
         g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 
         g.setColor(new Color(0, 32, 48));
-        g.fillRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 50);
+        g.fillRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 70);
         g.setColor(Color.white);
-        g.drawRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 50);
+        g.drawRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 70);
 
         var small = new Font("Helvetica", Font.BOLD, 14);
         var fontMetrics = this.getFontMetrics(small);
@@ -151,14 +440,36 @@ public class Scene2 extends JPanel {
         g.setColor(Color.white);
         g.setFont(small);
         g.drawString(message, (BOARD_WIDTH - fontMetrics.stringWidth(message)) / 2,
-                BOARD_WIDTH / 2);
+                BOARD_WIDTH / 2 - 10);
+
+        var tiny = new Font("Helvetica", Font.PLAIN, 12);
+        var tinyMetrics = this.getFontMetrics(tiny);
+        String retryText = "Press SPACE to retry";
+        g.setFont(tiny);
+        g.drawString(retryText, (BOARD_WIDTH - tinyMetrics.stringWidth(retryText)) / 2,
+                BOARD_WIDTH / 2 + 20);
     }
 
     private void update() {
-        if (deaths == NUMBER_OF_ALIENS_TO_DESTROY) {
-            inGame = false;
-            timer.stop();
-            message = "VICTORY! ALL STAGES CLEARED!";
+        SpawnDetails sd = spawnMap.get(frame);
+        if (sd != null) {
+            switch (sd.type) {
+                case "Alien1":
+                    enemies.add(new Alien1(sd.x, sd.y));
+                    break;
+                case "Alien2":
+                    enemies.add(new Alien2(sd.x, sd.y));
+                    break;
+                case "Alien3":
+                    enemies.add(new Alien3(sd.x, sd.y));
+                    break;
+                case "Boss":
+                    enemies.add(new Boss(sd.x, sd.y, BOSS_HIT_POINTS));
+                    break;
+                default:
+                    System.out.println("Unknown enemy type: " + sd.type);
+                    break;
+            }
         }
 
         if (player != null) {
@@ -176,22 +487,44 @@ public class Scene2 extends JPanel {
                     int enemyX = enemy.getX();
                     int enemyY = enemy.getY();
 
+                    // Boss has a much bigger visual footprint, so it needs a matching hitbox —
+                    // otherwise it'd look huge but only be hittable near its top-left corner.
+                    int hitWidth = (enemy instanceof Boss) ? Boss.WIDTH : ALIEN_WIDTH;
+                    int hitHeight = (enemy instanceof Boss) ? Boss.HEIGHT : ALIEN_HEIGHT;
+
                     if (enemy.isVisible() && shot.isVisible()
                             && shotX >= enemyX
-                            && shotX <= enemyX + ALIEN_WIDTH
+                            && shotX <= enemyX + hitWidth
                             && shotY >= enemyY
-                            && shotY <= enemyY + ALIEN_HEIGHT) {
+                            && shotY <= enemyY + hitHeight) {
 
                         boolean enemyDied = enemy.hit();
                         if (enemyDied) {
                             deaths++;
+                            AudioPlayer.playSoundEffect(Global.AUD_EXPLODE);
+
+                            if (enemy instanceof Boss) {
+                                score += 5000;
+                                inGame = false;
+                                timer.stop();
+                                message = "VICTORY! ALL STAGES CLEARED!";
+                                AudioPlayer.playSoundEffect(Global.AUD_LEVEL_UP);
+                            } else if (enemy instanceof Alien3) {
+                                juggernautKills++;
+                                score += 300;
+                            } else if (enemy instanceof Alien2) {
+                                wraithKills++;
+                                score += 150;
+                            } else if (enemy instanceof Alien1) {
+                                scoutKills++;
+                                score += 100;
+                            }
                         }
                         shot.die();
                         shotsToRemove.add(shot);
                     }
                 }
 
-                // Move shot right (mirrors Scene1's approach — shot.act() is unimplemented/throws)
                 int x = shot.getX();
                 x += 20;
                 if (x > BOARD_WIDTH) {
@@ -206,12 +539,101 @@ public class Scene2 extends JPanel {
         }
         shots.removeAll(shotsToRemove);
 
-        // Update enemies
+        // Update enemies + roll bomb drops
         for (Enemy enemy : enemies) {
             if (enemy.isVisible()) {
                 enemy.act(1);
+
+                Bomb newBomb = enemy.maybeDropBomb();
+                if (newBomb != null) {
+                    bombs.add(newBomb);
+                }
             }
         }
+
+        // Boss-specific behavior: minion spawning + laser telegraph attack (phase 2 only)
+        Boss boss = findBoss();
+        if (boss != null && boss.isVisible()) {
+            boss.updateAttack(player.getY());
+
+            String minionType = boss.maybeSpawnMinionType();
+            if (minionType != null) {
+                int minionY = 60 + randomizer.nextInt(500);
+                switch (minionType) {
+                    case "Alien1":
+                        enemies.add(new Alien1(720, minionY));
+                        break;
+                    case "Alien2":
+                        enemies.add(new Alien2(720, minionY));
+                        break;
+                    case "Alien3":
+                        enemies.add(new Alien3(720, minionY));
+                        break;
+                }
+            }
+
+            if (boss.isFiringLaser() && player.isVisible()) {
+                int laserY = boss.getLaserTargetY();
+                int playerY = player.getY();
+                if (playerY + PLAYER_HEIGHT >= laserY - Boss.LASER_HEIGHT / 2
+                        && playerY <= laserY + Boss.LASER_HEIGHT / 2) {
+                    if (boss.consumeLaserHit()) {
+                        player.hit();
+                        player.hit(); // laser hits harder than a bomb — meant to be dodged, not tanked
+                        if (player.isDying()) {
+                            var ii = new ImageIcon(IMG_EXPLOSION);
+                            player.setImage(ii.getImage());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bombs: move them, check collision with player, clean up off-screen ones
+        List<Bomb> bombsToRemove = new ArrayList<>();
+        for (Bomb bomb : bombs) {
+            if (!bomb.isVisible()) {
+                bombsToRemove.add(bomb);
+                continue;
+            }
+
+            bomb.act();
+
+            int bombX = bomb.getX();
+            int bombY = bomb.getY();
+            int playerX = player.getX();
+            int playerY = player.getY();
+
+            if (player.isVisible()
+                    && bombX >= playerX
+                    && bombX <= playerX + PLAYER_WIDTH
+                    && bombY >= playerY
+                    && bombY <= playerY + PLAYER_HEIGHT) {
+
+                player.hit();
+                bomb.die();
+                bombsToRemove.add(bomb);
+
+                if (player.isDying()) {
+                    var ii = new ImageIcon(IMG_EXPLOSION);
+                    player.setImage(ii.getImage());
+                }
+            } else if (bombX < 0) {
+                bomb.die();
+                bombsToRemove.add(bomb);
+            }
+        }
+        bombs.removeAll(bombsToRemove);
+
+        if (player.isDying()) {
+            player.die();
+            inGame = false;
+            timer.stop();
+            message = "Game Over";
+            AudioPlayer.playSoundEffect(Global.AUD_GAMEOVER);
+        }
+
+        frame++;
     }
 
     private void doGameCycle() {
@@ -229,25 +651,33 @@ public class Scene2 extends JPanel {
     private class TAdapter extends KeyAdapter {
         @Override
         public void keyReleased(KeyEvent e) {
-            if (player != null) {
+            if (inGame && player != null) {
                 player.keyReleased(e);
             }
         }
 
         @Override
         public void keyPressed(KeyEvent e) {
+            int key = e.getKeyCode();
+
+            if (!inGame) {
+                if (key == KeyEvent.VK_SPACE) {
+                    restartStage();
+                }
+                return;
+            }
+
             if (player != null) {
                 player.keyPressed(e);
             }
 
-            int key = e.getKeyCode();
-
-            if (key == KeyEvent.VK_SPACE && inGame) {
+            if (key == KeyEvent.VK_SPACE) {
                 int x = player.getX();
                 int y = player.getY();
 
-                if (shots.size() < 5) {
+                if (shots.size() < player.getMaxShots()) {
                     shots.add(new Shot(x, y));
+                    AudioPlayer.playSoundEffect(Global.AUD_FIRE);
                 }
             }
         }

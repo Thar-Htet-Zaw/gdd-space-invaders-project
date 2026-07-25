@@ -60,7 +60,7 @@ public class Enemy extends Sprite {
     }
 
     private static final Random bombRandomizer = new Random();
-    private static final int BOMB_CHANCE_RANGE = 300; // ~1-in-300 odds per enemy, per frame
+    protected int bombChanceRange = 300; // ~1-in-300 odds per enemy, per frame (subclasses may override)
 
     /**
      * Rolls the odds for this enemy to drop a bomb this frame.
@@ -70,7 +70,7 @@ public class Enemy extends Sprite {
         if (!isVisible()) {
             return null;
         }
-        if (bombRandomizer.nextInt(BOMB_CHANCE_RANGE) == 0) {
+       if (bombRandomizer.nextInt(bombChanceRange) == 0) {
             return new Bomb(this.x, this.y);
         }
         return null;

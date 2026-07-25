@@ -37,6 +37,7 @@ public class Global {
     public static final String IMG_POWERUP_SPEEDUP = "src/images/powerup-s.png";
     public static final String IMG_POWERUP_MULTISHOT = "src/images/powerup-m.png";
     public static final String IMG_BOMB = "src/images/bomb.png";
+    public static final String IMG_BOSS = "src/images/boss.png";
 
     // Audio Files
     public static final String AUD_TITLE = "src/audio/title.wav";
