@@ -2,6 +2,8 @@ package gdd.scene;
 
 import gdd.AudioPlayer;
 import gdd.Game;
+import gdd.Global;
+
 import static gdd.Global.*;
 import gdd.SpawnDetails;
 import gdd.powerup.PowerUp;
@@ -550,11 +552,14 @@ public class Scene1 extends JPanel {
         player.act();
 
         // Power-ups
+        // Power-ups
         for (PowerUp powerup : powerups) {
             if (powerup.isVisible()) {
                 powerup.act();
                 if (powerup.collidesWith(player)) {
                     powerup.upgrade(player);
+
+                    AudioPlayer.playSoundEffect(Global.AUD_LEVEL_UP);
 
                     if (powerup instanceof SpeedUp) {
                         showPickupMessage("Speed Increased!");
@@ -626,7 +631,7 @@ public class Scene1 extends JPanel {
         }
         bombs.removeAll(bombsToRemove);
 
-        // Player death from a bomb hit ends the stage, matching Scene2's game-over pattern
+        // Player death from a bomb hit ends the stage
         if (player.isDying()) {
             player.die();
             inGame = false;
@@ -635,13 +640,14 @@ public class Scene1 extends JPanel {
 
             if (audioPlayer != null) {
                 try {
-                    audioPlayer.stop(); // Stops and closes the audio clip[cite: 16]
+                    audioPlayer.stop(); // Stops background music
                 } catch (Exception e) {
                     System.err.println("Error stopping audio: " + e.getMessage());
                 }
             }
-            
-            message = "Game Over";
+
+            // Play game over sound effect
+            AudioPlayer.playSoundEffect(Global.AUD_GAMEOVER);
         }
 
         // shot
@@ -670,6 +676,9 @@ public class Scene1 extends JPanel {
                             enemy.setImage(ii.getImage());
                             explosions.add(new Explosion(enemyX, enemyY));
                             deaths++;
+
+                            // Play explosion sound
+                            AudioPlayer.playSoundEffect("src/audio/explode.wav");
 
                             if (enemy instanceof Alien3) {
                                 juggernautKills++;
@@ -785,6 +794,7 @@ public class Scene1 extends JPanel {
 
         @Override
         public void keyReleased(KeyEvent e) {
+            // Crucial: stops the player ship from moving when key is released!
             player.keyReleased(e);
         }
 
@@ -792,6 +802,7 @@ public class Scene1 extends JPanel {
         public void keyPressed(KeyEvent e) {
             int key = e.getKeyCode();
 
+            // When Game Over: pressing SPACE restarts the game
             if (!inGame) {
                 if (key == KeyEvent.VK_SPACE) {
                     stop();
@@ -800,6 +811,7 @@ public class Scene1 extends JPanel {
                 return;
             }
 
+            // Normal gameplay input
             player.keyPressed(e);
 
             int x = player.getX();
@@ -809,6 +821,9 @@ public class Scene1 extends JPanel {
                 if (shots.size() < player.getMaxShots()) {
                     Shot shot = new Shot(x, y);
                     shots.add(shot);
+
+                    // PUT IT RIGHT HERE:
+                    AudioPlayer.playSoundEffect("src/audio/fire.wav");
                 }
             }
         }
