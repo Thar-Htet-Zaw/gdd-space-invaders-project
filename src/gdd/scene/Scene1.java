@@ -69,6 +69,7 @@ public class Scene1 extends JPanel {
     private static final int PICKUP_MESSAGE_FADE_FRAMES = 60;  // ~1s fading out
  
     private boolean inGame = true;
+    private boolean isVictory = false;
     private String message = "Game Over";
  
     // --- Stage 1 dashboard ---
@@ -835,6 +836,7 @@ public class Scene1 extends JPanel {
         if (inGame && frame >= STAGE_DURATION_FRAMES) {
             inGame = false;
             showDashboard = true;
+            isVictory = true;
             timer.stop();
  
             if (audioPlayer != null) {
@@ -1097,30 +1099,30 @@ public class Scene1 extends JPanel {
     }
  
     private class TAdapter extends KeyAdapter {
-
         @Override
         public void keyReleased(KeyEvent e) {
+        if (inGame && player != null) {
             player.keyReleased(e);
         }
+    }
 
-        @Override
-        public void keyPressed(KeyEvent e) {
-            int key = e.getKeyCode();
+    @Override
+    public void keyPressed(KeyEvent e) {
+        int key = e.getKeyCode();
 
-            // When Game Over or Stage Cleared (Dashboard):
-            if (!inGame) {
-                if (showDashboard) {
-                    if (key == KeyEvent.VK_ENTER) {
-                        proceedToScene2();
-                    }
-                    return;
-                }
-                if (key == KeyEvent.VK_SPACE || key == KeyEvent.VK_ENTER) {
-                    stop();
-                    start();
-                }
-                return;
+        // 1. Check if the player is on the victory screen and pressed ENTER
+        if (!inGame) {
+    if (key == KeyEvent.VK_ENTER) {
+            if (isVictory || showDashboard) {
+                Scene1.this.stop(); 
+                game.loadScene2();
+            } else {
+                Scene1.this.stop(); 
+                game.loadScene1();
             }
+        }
+        return;
+    }
 
             player.keyPressed(e);
 

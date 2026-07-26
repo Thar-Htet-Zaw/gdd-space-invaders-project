@@ -54,12 +54,22 @@ public class Game extends JFrame  {
     }
 
     public void loadScene2() {
-        getContentPane().removeAll();
+        if (scene1 != null) {
+            scene1.stop();
+            scene1.setVisible(false);
+            getContentPane().remove(scene1); 
+        }
+
+        getContentPane().removeAll(); 
+        
+        scene2.setVisible(true); 
         add(scene2);
-        if (scene1 != null) scene1.stop();
-        scene2.start();
+
         revalidate();
         repaint();
+
+        scene2.start();
+        scene2.setFocusable(true);
         scene2.requestFocusInWindow();
     }
 }

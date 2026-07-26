@@ -53,6 +53,7 @@ public class Scene2 extends JPanel {
 
     private AudioPlayer audioPlayer;
     private boolean bossMusicStarted = false;
+    
 
     private int frame = 0;
     private int deaths = 0;
@@ -72,8 +73,7 @@ public class Scene2 extends JPanel {
     private int bossSpawnFrame;
     private static final int WARNING_DURATION_FRAMES = 180; // ~3s flickering warning before boss arrives
 
-    // Danger-zone background theme: same scrolling mechanism as Scene1's
-    // starfield, but a distinct warm-color hazard motif instead of white stars.
+    // Danger-zone background theme
     final int BLOCKHEIGHT = 50;
     final int BLOCKWIDTH = 50;
     private final int[][] MAP = {
@@ -123,6 +123,9 @@ public class Scene2 extends JPanel {
     }
 
     public void start() {
+        inGame = true;      
+        isVictory = false;
+        frame = 0;
         try {
             if (audioPlayer != null) {
                 audioPlayer.stop();
@@ -132,7 +135,12 @@ public class Scene2 extends JPanel {
         } catch (Exception e) {
             System.err.println("Error playing Stage 2 audio: " + e.getMessage());
         }
+
         bossMusicStarted = false;
+
+        setFocusable(true);
+        requestFocusInWindow();
+
         timer.start();
     }
 
@@ -149,37 +157,82 @@ public class Scene2 extends JPanel {
         }
     }
 
+    // --- Enemy Formation Templates ---
+    private static final int[][] FORMATION_V_SMALL = {
+        {0, 0}, {45, -45}, {45, 45}
+    };
+    private static final int[][] FORMATION_V_LARGE = {
+        {0, 0}, {45, -45}, {45, 45}, {90, -90}, {90, 90}
+    };
+    private static final int[][] FORMATION_WALL_SMALL = {
+        {0, -50}, {0, 0}, {0, 50}
+    };
+    private static final int[][] FORMATION_WALL_LARGE = {
+        {0, -100}, {0, -50}, {0, 0}, {0, 50}, {0, 100}
+    };
+    private static final int[][] FORMATION_DIAGONAL_LARGE = {
+        {0, -100}, {50, -50}, {100, 0}, {150, 50}, {200, 100}
+    };
+    private static final int[][][] FORMATIONS = {
+        FORMATION_V_SMALL, FORMATION_WALL_SMALL, FORMATION_V_LARGE, FORMATION_WALL_LARGE, FORMATION_DIAGONAL_LARGE
+    };
+
     private void loadSpawnDetails() {
-        int frameCursor = 100;
+        // Periodic Power-Up Spawns spread throughout the 5 minutes
         spawnMap.put(300, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
-        spawnMap.put(800, new SpawnDetails("PowerUp-MultiShot", 720, 350));
-        spawnMap.put(1500, new SpawnDetails("PowerUp-SpeedUp", 720, 150));
-        spawnMap.put(2200, new SpawnDetails("PowerUp-MultiShot", 720, 400));
+        spawnMap.put(1800, new SpawnDetails("PowerUp-MultiShot", 720, 350));
+        spawnMap.put(4500, new SpawnDetails("PowerUp-SpeedUp", 720, 150));
+        spawnMap.put(7200, new SpawnDetails("PowerUp-MultiShot", 720, 400));
+        spawnMap.put(10500, new SpawnDetails("PowerUp-SpeedUp", 720, 250));
+        spawnMap.put(14000, new SpawnDetails("PowerUp-MultiShot", 720, 300));
 
-        // Wave 1: Scouts (Alien1)
-        for (int i = 0; i < 8; i++) {
-            spawnMap.put(frameCursor, new SpawnDetails("Alien1", 720, 60 + randomizer.nextInt(500)));
-            frameCursor += 150;
+        int frameCursor = 150;
+
+        // --- PHASE 1: Initial Warmup Waves (0 - 1.5 minutes / ~5,400 frames) ---
+        for (int i = 0; i < 15; i++) {
+            String type = (i % 3 == 0) ? "Alien2" : "Alien1";
+            for (int k = 0; k < 4; k++) {
+                spawnMap.put(frameCursor, new SpawnDetails(type, 720, 80 + randomizer.nextInt(460)));
+                frameCursor += 40;
+            }
+            frameCursor += 250; // breather between mini-waves
         }
 
-        frameCursor += 200; // brief breather before the next wave
+        // --- PHASE 2: Formation Assault (1.5 - 3.5 minutes / ~12,600 frames) ---
+        for (int wave = 0; wave < 30; wave++) {
+            int[][] formation = FORMATIONS[wave % FORMATIONS.length];
+            String enemyType = (wave % 4 == 0) ? "Alien3" : ((wave % 2 == 0) ? "Alien2" : "Alien1");
+            int baseY = 160 + randomizer.nextInt(300);
 
-        // Wave 2: Wraiths (Alien2, zigzag)
-        for (int i = 0; i < 8; i++) {
-            spawnMap.put(frameCursor, new SpawnDetails("Alien2", 720, 60 + randomizer.nextInt(500)));
-            frameCursor += 150;
+            for (int i = 0; i < formation.length; i++) {
+                int dx = formation[i][0];
+                int dy = formation[i][1];
+                spawnMap.put(frameCursor + i, new SpawnDetails(enemyType, 720 + dx, baseY + dy));
+            }
+
+            // Lone harasser enemy during lull
+            if (randomizer.nextInt(100) < 60) {
+                spawnMap.put(frameCursor + formation.length + 80, 
+                        new SpawnDetails("Alien2", 720, 60 + randomizer.nextInt(500)));
+            }
+
+            frameCursor += formation.length + 220;
         }
 
-        frameCursor += 200;
+        // --- PHASE 3: Heavy Escort & Final Onslaught (3.5 - 5.0+ minutes / ~18,000+ frames) ---
+        for (int wave = 0; wave < 25; wave++) {
+            // Mixed wave: Tanky Juggernaut surrounded by Scouts/Wraiths
+            spawnMap.put(frameCursor, new SpawnDetails("Alien3", 720, 150 + randomizer.nextInt(300)));
+            spawnMap.put(frameCursor + 15, new SpawnDetails("Alien1", 720, 80));
+            spawnMap.put(frameCursor + 30, new SpawnDetails("Alien1", 720, 520));
+            spawnMap.put(frameCursor + 45, new SpawnDetails("Alien2", 720, 300));
 
-        // Wave 3: Juggernauts (Alien3, tank)
-        for (int i = 0; i < 6; i++) {
-            spawnMap.put(frameCursor, new SpawnDetails("Alien3", 720, 60 + randomizer.nextInt(500)));
-            frameCursor += 200;
+            frameCursor += 180;
         }
 
-        frameCursor += 300; // dramatic pause before the boss
+        frameCursor += 300; // Dramatic silence pause right before boss arrival
 
+        // Boss spawns after ~5+ minutes (frameCursor >= 18,000)
         bossSpawnFrame = frameCursor;
         spawnMap.put(frameCursor, new SpawnDetails("Boss", 720, 100));
     }
@@ -205,7 +258,6 @@ public class Scene2 extends JPanel {
         message = "Game Over";
         bossMusicStarted = false;
         
-        // Reset back to Stage 2 background music
         try {
             if (audioPlayer != null) {
                 audioPlayer.stop();
@@ -263,7 +315,6 @@ public class Scene2 extends JPanel {
                     Boss boss = (Boss) enemy;
                     drawBossAnimated(g, boss);
                 } else {
-                    // Subtle "breathing" pulse -- pure drawing transform, no new art.
                     double pulse = 1.0 + 0.06 * Math.sin(enemy.getAnimFrame() * 0.15);
                     Image img = enemy.getImage();
                     int baseW = img.getWidth(this);
@@ -282,20 +333,11 @@ public class Scene2 extends JPanel {
         }
     }
 
-    /**
-     * Draws the boss as a set of thin horizontal strips, each offset left/right by a
-     * sine wave whose amplitude grows toward the bottom of the image (where the
-     * tentacles are) and stays near-zero at the top (the head). This makes the
-     * tentacles appear to ripple/sway independently while the head stays relatively
-     * anchored -- pure drawing, no new art or sprite sheet needed.
-     */
     private void drawBossAnimated(Graphics g, Boss boss) {
         Image img = boss.getImage();
         int srcW = Boss.WIDTH;
         int srcH = Boss.HEIGHT;
 
-        // Overall gentle pulse (kept, but subtler now that the tentacle wave carries
-        // most of the "alive" feeling), stronger once enraged.
         double amp = boss.isPhaseTwo() ? 0.02 : 0.01;
         double pulse = 1.0 + amp * Math.sin(boss.getAnimFrame() * 0.2);
         int w = (int) (srcW * pulse);
@@ -309,8 +351,8 @@ public class Scene2 extends JPanel {
         int stripSrcH = Math.max(1, srcH / strips);
         int stripDstH = Math.max(1, h / strips);
 
-        float waveSpeed = boss.isPhaseTwo() ? 0.25f : 0.15f; // ripples faster once enraged
-        float waveFrequency = 0.35f; // how tightly packed the ripples are, strip to strip
+        float waveSpeed = boss.isPhaseTwo() ? 0.25f : 0.15f;
+        float waveFrequency = 0.35f;
 
         for (int i = 0; i < strips; i++) {
             int srcY1 = i * stripSrcH;
@@ -318,15 +360,11 @@ public class Scene2 extends JPanel {
             int dstY1 = baseDrawY + i * stripDstH;
             int dstY2 = dstY1 + stripDstH;
 
-            // Amplitude eases in from 0 (top/head) to full strength (bottom/tentacles)
             float verticalProgress = (float) i / strips;
             float stripAmplitude = 18f * verticalProgress * verticalProgress;
 
             int xOffset = (int) (stripAmplitude * Math.sin(boss.getAnimFrame() * waveSpeed + i * waveFrequency));
 
-            // Destination x1 > x2 flips this strip horizontally, same principle as the
-            // old whole-image flip, just applied per-strip so each can also carry its
-            // own wave offset.
             g.drawImage(img,
                     baseDrawX + xOffset + w, dstY1, baseDrawX + xOffset, dstY2,
                     0, srcY1, srcW, srcY2,
@@ -339,8 +377,6 @@ public class Scene2 extends JPanel {
             if (bomb.isVisible()) {
                 bomb.tickAnimation();
 
-                // Small pulse so the bomb reads as active/dangerous, not a
-                // frozen icon. Pure drawing transform, no new art.
                 double pulse = 1.0 + 0.15 * Math.sin(bomb.getAnimFrame() * 0.4);
                 Image img = bomb.getImage();
                 int baseW = img.getWidth(this);
@@ -366,11 +402,8 @@ public class Scene2 extends JPanel {
             int width = player.getImage().getWidth(null);
             int height = player.getImage().getHeight(null);
 
-            // Rotate to face right, matching Scene1's orientation fix
             g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
 
-            // Subtle engine-thrust pulse -- scales the ship slightly each frame.
-            // Pure drawing transform, no new art needed.
             double pulse = 1.0 + 0.04 * Math.sin(player.getAnimFrame() * 0.3);
             int w = (int) (width * pulse);
             int h = (int) (height * pulse);
@@ -438,7 +471,7 @@ public class Scene2 extends JPanel {
         int barWidth = 400;
         int barHeight = 20;
         int x = (BOARD_WIDTH - barWidth) / 2;
-        int y = 75; // below the player HP bar's row (40-55), so they never overlap
+        int y = 75;
 
         int currentHp = Math.max(0, boss.getHitPoints());
         int maxHp = BOSS_HIT_POINTS;
@@ -461,7 +494,6 @@ public class Scene2 extends JPanel {
     }
 
     private void drawStatusHUD(Graphics g) {
-        // Kill breakdown, bottom-left of the health bars
         g.setColor(Color.WHITE);
         var small = new Font("Helvetica", Font.PLAIN, 13);
         g.setFont(small);
@@ -469,7 +501,6 @@ public class Scene2 extends JPanel {
         g.drawString("Wraith Kills: " + wraithKills, 10, 125);
         g.drawString("Juggernaut Kills: " + juggernautKills, 10, 140);
 
-        // Time + score, top-right corner
         var timerFont = new Font("Helvetica", Font.BOLD, 18);
         g.setFont(timerFont);
         var fmTimer = g.getFontMetrics(timerFont);
@@ -477,13 +508,12 @@ public class Scene2 extends JPanel {
         g.setColor(Color.WHITE);
         g.drawString(timeText, BOARD_WIDTH - fmTimer.stringWidth(timeText) - 10, 20);
 
-       var scoreFont = new Font("Helvetica", Font.PLAIN, 14);
+        var scoreFont = new Font("Helvetica", Font.PLAIN, 14);
         g.setFont(scoreFont);
         var fmScore = g.getFontMetrics(scoreFont);
         String scoreText = "Score: " + score;
         g.drawString(scoreText, BOARD_WIDTH - fmScore.stringWidth(scoreText) - 10, 40);
 
-        // Speed and Shots-upgrade level, same corner, under the score
         String speedText = "Speed: " + player.getSpeed();
         g.drawString(speedText, BOARD_WIDTH - fmScore.stringWidth(speedText) - 10, 60);
         String shotsText = "Shots: " + player.getMaxShots();
@@ -503,7 +533,7 @@ public class Scene2 extends JPanel {
             return;
         }
 
-        if (frame % 20 < 10) { // flicker
+        if (frame % 20 < 10) {
             String warning = "WARNING: " + BOSS_NAME + " IS COMING!";
             var font = new Font("Helvetica", Font.BOLD, 26);
             g.setFont(font);
@@ -525,7 +555,6 @@ public class Scene2 extends JPanel {
 
         boolean charging = boss.isCharging();
 
-        // Flicker while charging (telegraph warning), solid while firing
         if (charging && frame % 10 >= 5) {
             return;
         }
@@ -574,23 +603,24 @@ public class Scene2 extends JPanel {
     }
 
     private void drawExplosions(Graphics g) {
-
         List<Explosion> toRemove = new ArrayList<>();
 
         for (Explosion explosion : explosions) {
-
             if (explosion.isVisible()) {
                 explosion.tickAnimation();
 
-                // Grow-and-fade burst -- matches Scene1's explosion animation.
-                int lifeFrames = 10; // matches Sprite's default visibleFrames countdown
+                int lifeFrames = 10;
                 float progress = Math.min(1f, explosion.getAnimFrame() / (float) lifeFrames);
                 double scale = 0.6 + 0.9 * progress;
                 float alpha = Math.max(0f, 1f - progress);
 
                 Image img = explosion.getImage();
-                int baseW = Explosion.getExplosionSize();
-                int baseH = Explosion.getExplosionSize();
+                
+                // --- FIX APPLIED HERE ---
+                int baseW = img.getWidth(this);
+                int baseH = img.getHeight(this);
+                // ------------------------
+                
                 int w = (int) (baseW * scale);
                 int h = (int) (baseH * scale);
                 int drawX = explosion.getX() - (w - baseW) / 2;
@@ -607,7 +637,6 @@ public class Scene2 extends JPanel {
                 }
             }
         }
-
         explosions.removeAll(toRemove);
     }
 
@@ -660,9 +689,8 @@ public class Scene2 extends JPanel {
     private void drawPowerUpMessage(Graphics g) {
         if (powerUpMessageTimer > 0 && !powerUpMessage.isEmpty()) {
             g.setFont(new Font("Helvetica", Font.BOLD, 18));
-            g.setColor(new Color(255, 215, 0)); // Gold color
+            g.setColor(new Color(255, 215, 0));
             
-            // Draw centered at the top area of the screen
             g.drawString(powerUpMessage, 200, 80); 
         }
     }
@@ -681,7 +709,6 @@ public class Scene2 extends JPanel {
         g.setColor(Color.black);
         g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 
-        // Header Title
         var titleFont = new Font("Helvetica", Font.BOLD, 28);
         g.setFont(titleFont);
         g.setColor(Color.GREEN);
@@ -689,7 +716,6 @@ public class Scene2 extends JPanel {
         String title = "VICTORY! ALL STAGES CLEARED!";
         g.drawString(title, (BOARD_WIDTH - fmTitle.stringWidth(title)) / 2, 100);
 
-        // Stats Box / Summary
         var labelFont = new Font("Helvetica", Font.PLAIN, 18);
         g.setFont(labelFont);
         g.setColor(Color.WHITE);
@@ -710,7 +736,6 @@ public class Scene2 extends JPanel {
         lineY += lineGap;
         g.drawString("Boss Defeated: " + BOSS_NAME, lineX, lineY);
 
-        // Restart Prompt
         var smallFont = new Font("Helvetica", Font.BOLD, 14);
         g.setFont(smallFont);
         g.setColor(Color.YELLOW);
@@ -762,8 +787,6 @@ public class Scene2 extends JPanel {
                     int enemyX = enemy.getX();
                     int enemyY = enemy.getY();
 
-                    // Boss has a much bigger visual footprint, so it needs a matching hitbox —
-                    // otherwise it'd look huge but only be hittable near its top-left corner.
                     int hitWidth = (enemy instanceof Boss) ? Boss.WIDTH : ALIEN_WIDTH;
                     int hitHeight = (enemy instanceof Boss) ? Boss.HEIGHT : ALIEN_HEIGHT;
 
@@ -786,7 +809,6 @@ public class Scene2 extends JPanel {
                                 timer.stop();
                                 message = "VICTORY! ALL STAGES CLEARED!";
                                 
-                                // Stop background audio on victory as well
                                 if (audioPlayer != null) {
                                     try {
                                         audioPlayer.stop();
@@ -808,6 +830,7 @@ public class Scene2 extends JPanel {
                         }
                         shot.die();
                         shotsToRemove.add(shot);
+                        break;
                     }
                 }
 
@@ -843,9 +866,9 @@ public class Scene2 extends JPanel {
             if (!bossMusicStarted) {
                 try {
                     if (audioPlayer != null) {
-                        audioPlayer.stop(); // Stop stage2.wav
+                        audioPlayer.stop();
                     }
-                    audioPlayer = new AudioPlayer(Global.AUD_BOSS); // Start boss-battle.wav
+                    audioPlayer = new AudioPlayer(Global.AUD_BOSS);
                     audioPlayer.play();
                     bossMusicStarted = true;
                 } catch (Exception e) {
@@ -884,7 +907,7 @@ public class Scene2 extends JPanel {
             }
         }
 
-        // Bombs: move them, check collision with player, clean up off-screen ones
+        // Bombs
         List<Bomb> bombsToRemove = new ArrayList<>();
         for (Bomb bomb : bombs) {
             if (!bomb.isVisible()) {
@@ -928,7 +951,6 @@ public class Scene2 extends JPanel {
             timer.stop();
             message = "Game Over";
 
-            // Stop background music upon dying
             if (audioPlayer != null) {
                 try {
                     audioPlayer.stop();
@@ -967,11 +989,9 @@ public class Scene2 extends JPanel {
         }
         powerUps.removeAll(powerUpsToRemove);
 
-        // Tick down the message display timer
         if (powerUpMessageTimer > 0) {
             powerUpMessageTimer--;
         }
-
 
         frame++;
     }
@@ -1015,8 +1035,19 @@ public class Scene2 extends JPanel {
                 int x = player.getX();
                 int y = player.getY();
 
-                if (shots.size() < player.getMaxShots()) {
-                    shots.add(new Shot(x, y));
+                int maxShots = player.getMaxShots();
+                if (shots.size() < maxShots) {
+                    // If maxShots > 1, spawn offset shots
+                    if (maxShots >= 3) {
+                        shots.add(new Shot(x, y - 10));
+                        shots.add(new Shot(x, y));
+                        shots.add(new Shot(x, y + 10));
+                    } else if (maxShots == 2) {
+                        shots.add(new Shot(x, y - 8));
+                        shots.add(new Shot(x, y + 8));
+                    } else {
+                        shots.add(new Shot(x, y));
+                    }
                     AudioPlayer.playSoundEffect(Global.AUD_FIRE);
                 }
             }

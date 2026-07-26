@@ -36,7 +36,7 @@ public class AudioPlayer {
 
     // Method to play the audio
     public void play() {
-        clip.start();
+        clip.loop(Clip.LOOP_CONTINUOUSLY);
         status = "play";
     }
 
