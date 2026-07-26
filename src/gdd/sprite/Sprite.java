@@ -14,8 +14,23 @@ public abstract class Sprite {
     protected int dx;
     protected int dy;
 
+    // Animation clock — additive only. Nothing reads or writes this unless a
+    // scene's draw code opts in for a given sprite type, so sprites that never
+    // call tickAnimation() behave exactly as before (static image, no change).
+    protected int animFrame = 0;
+
     public Sprite() {
         visible = true;
+    }
+
+    /** Advances this sprite's animation clock by one tick. Call once per frame
+     *  from draw code (not update logic) for any sprite you want to animate. */
+    public void tickAnimation() {
+        animFrame++;
+    }
+
+    public int getAnimFrame() {
+        return animFrame;
     }
 
     abstract public void act();

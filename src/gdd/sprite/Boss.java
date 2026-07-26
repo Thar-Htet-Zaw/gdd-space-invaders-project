@@ -1,6 +1,9 @@
 package gdd.sprite;
 
 import static gdd.Global.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 import javax.swing.ImageIcon;
 
@@ -17,36 +20,42 @@ public class Boss extends Enemy {
 
     private final int maxHitPoints;
     private boolean phaseTwo = false;
-    private int baseY;
 
     private final int engageX; // the boss never advances past this X — stays locked in place
+    private int baseY;
     private double swayFrame = 0;
 
     private static final int APPROACH_SPEED = 2; // speed while first entering, before reaching engageX
-    private static final int PHASE1_BOMB_CHANCE_RANGE = 150;
-    private static final int PHASE2_BOMB_CHANCE_RANGE = 60;
 
     private static final Random minionRandomizer = new Random();
     private static final int MINION_CHANCE_RANGE = 400; // ~1-in-400 odds per frame, phase 2 only
 
-    // --- Laser telegraph attack (phase 2 only) ---
-    private enum AttackState { IDLE, CHARGING_LASER, FIRING_LASER }
-    private AttackState attackState = AttackState.IDLE;
-    private int attackTimer = 0;
-    private int laserTargetY = 0;
-    private boolean laserHasHitPlayer = false;
+    // --- Unified danger-zone attack system ---
+    // All 4 attacks share one telegraph -> fire -> cooldown cycle, just with
+    // different zone shapes/positions. LASER is the only attack available in
+    // phase 1; phase 2 unlocks the other 3 and rotates randomly between all 4.
+    public enum AttackType { LASER, TENTACLE_SLAM, EYE_BEAM_BARRAGE, SPORE_SWARM }
+    private enum AttackState { IDLE, CHARGING, FIRING }
 
-    private static final int LASER_CHARGE_FRAMES = 75;    // ~1.25s telegraph warning
-    private static final int LASER_FIRE_FRAMES = 20;      // ~0.33s active beam
-    private static final int LASER_COOLDOWN_FRAMES = 240; // ~4s between laser attacks
+    private AttackState attackState = AttackState.IDLE;
+    private AttackType currentAttack = AttackType.LASER;
+    private int attackTimer = 0;
+    private boolean hasHitPlayer = false;
+    private final List<int[]> activeZones = new ArrayList<>(); // each: {x, y, width, height}
+
+    private static final Random attackRandomizer = new Random();
+    private static final int CHARGE_FRAMES = 75;       // ~1.25s telegraph warning
+    private static final int FIRE_FRAMES = 20;         // ~0.33s active damage window
+    private static final int COOLDOWN_PHASE1 = 240;    // ~4s between attacks
+    private static final int COOLDOWN_PHASE2 = 150;    // ~2.5s once enraged — faster pace
 
     public Boss(int x, int y, int startingHitPoints) {
         super(x, y);
         setHitPoints(startingHitPoints);
         this.maxHitPoints = startingHitPoints;
-        this.bombChanceRange = PHASE1_BOMB_CHANCE_RANGE;
-        this.engageX = BOARD_WIDTH - WIDTH - 3; // small right-edge margin (shifted further right per feedback)
+        this.engageX = BOARD_WIDTH - WIDTH - 3; // small right-edge margin
         this.baseY = y + 5; // small buffer below the boss HP bar, since there's little vertical room to spare
+
         // Override the default enemy-sized sprite with a larger, boss-appropriate size.
         var ii = new ImageIcon(IMG_BOSS);
         var scaledImage = ii.getImage().getScaledInstance(WIDTH, HEIGHT, java.awt.Image.SCALE_SMOOTH);
@@ -58,15 +67,10 @@ public class Boss extends Enemy {
         boolean died = super.hit();
 
         if (!phaseTwo && !died && getHitPoints() <= maxHitPoints / 2) {
-            enterPhaseTwo();
+            phaseTwo = true;
         }
 
         return died;
-    }
-
-    private void enterPhaseTwo() {
-        phaseTwo = true;
-        this.bombChanceRange = PHASE2_BOMB_CHANCE_RANGE;
     }
 
     @Override
@@ -95,6 +99,12 @@ public class Boss extends Enemy {
         return this.x <= engageX;
     }
 
+    /** Bombs are fully replaced by the danger-zone attack system below. */
+    @Override
+    public Bomb maybeDropBomb() {
+        return null;
+    }
+
     /**
      * Rolls the odds for the boss to spawn a minion this frame. Only active once
      * enraged (phase 2) and only once the boss has reached its fighting position.
@@ -112,69 +122,127 @@ public class Boss extends Enemy {
     }
 
     /**
-     * Drives the laser telegraph/fire/cooldown cycle. Call once per frame.
-     * Only active once enraged (phase 2) and once the boss has reached position.
+     * Drives the telegraph/fire/cooldown cycle for whichever attack is active.
+     * Call once per frame with the player's current position.
      */
-    public void updateAttack(int playerY) {
-        if (!phaseTwo || !hasEngaged()) {
+    public void updateAttack(int playerX, int playerY) {
+        if (!hasEngaged()) {
             return;
         }
 
         switch (attackState) {
             case IDLE:
                 attackTimer++;
-                if (attackTimer >= LASER_COOLDOWN_FRAMES) {
-                    attackState = AttackState.CHARGING_LASER;
-                    attackTimer = 0;
-                    laserTargetY = playerY; // locks onto the player's row at the moment of charge
-                    laserHasHitPlayer = false;
+                int cooldown = phaseTwo ? COOLDOWN_PHASE2 : COOLDOWN_PHASE1;
+                if (attackTimer >= cooldown) {
+                    startCharging(playerX, playerY);
                 }
                 break;
-            case CHARGING_LASER:
+            case CHARGING:
                 attackTimer++;
-                if (attackTimer >= LASER_CHARGE_FRAMES) {
-                    attackState = AttackState.FIRING_LASER;
+                if (attackTimer >= CHARGE_FRAMES) {
+                    attackState = AttackState.FIRING;
                     attackTimer = 0;
                 }
                 break;
-            case FIRING_LASER:
+            case FIRING:
                 attackTimer++;
-                if (attackTimer >= LASER_FIRE_FRAMES) {
+                if (attackTimer >= FIRE_FRAMES) {
                     attackState = AttackState.IDLE;
                     attackTimer = 0;
+                    activeZones.clear();
                 }
                 break;
         }
     }
 
-    public boolean isChargingLaser() {
-        return attackState == AttackState.CHARGING_LASER;
+    private void startCharging(int playerX, int playerY) {
+        attackState = AttackState.CHARGING;
+        attackTimer = 0;
+        hasHitPlayer = false;
+        activeZones.clear();
+
+        if (!phaseTwo) {
+            currentAttack = AttackType.LASER; // phase 1: laser only
+        } else {
+            AttackType[] options = AttackType.values();
+            currentAttack = options[attackRandomizer.nextInt(options.length)];
+        }
+
+        switch (currentAttack) {
+            case LASER:
+                activeZones.add(new int[]{0, playerY - LASER_HEIGHT / 2, BOARD_WIDTH, LASER_HEIGHT});
+                break;
+
+            case TENTACLE_SLAM: {
+                // Close-range zone reaching out from the boss — punishes staying near it
+                int slamWidth = 220;
+                int slamX = Math.max(0, engageX - (slamWidth - WIDTH));
+                activeZones.add(new int[]{slamX, 0, slamWidth, BOARD_HEIGHT});
+                break;
+            }
+
+            case EYE_BEAM_BARRAGE: {
+                // 3 of 5 horizontal bands light up, leaving gaps to dodge into
+                int bandHeight = BOARD_HEIGHT / 5;
+                List<Integer> bandIndices = new ArrayList<>();
+                for (int i = 0; i < 5; i++) {
+                    bandIndices.add(i);
+                }
+                Collections.shuffle(bandIndices, attackRandomizer);
+                for (int i = 0; i < 3; i++) {
+                    int idx = bandIndices.get(i);
+                    activeZones.add(new int[]{0, idx * bandHeight, BOARD_WIDTH, bandHeight - 5});
+                }
+                break;
+            }
+
+            case SPORE_SWARM: {
+                // Cluster of small patches scattered near the player's row
+                for (int i = 0; i < 4; i++) {
+                    int zoneSize = 55;
+                    int zx = 150 + attackRandomizer.nextInt(450);
+                    int zy = Math.max(20, Math.min(BOARD_HEIGHT - zoneSize - 20,
+                            playerY - 60 + attackRandomizer.nextInt(140)));
+                    activeZones.add(new int[]{zx, zy, zoneSize, zoneSize});
+                }
+                break;
+            }
+        }
     }
 
-    public boolean isFiringLaser() {
-        return attackState == AttackState.FIRING_LASER;
+    public boolean isCharging() {
+        return attackState == AttackState.CHARGING;
     }
 
-    public int getLaserTargetY() {
-        return laserTargetY;
+    public boolean isFiring() {
+        return attackState == AttackState.FIRING;
     }
 
-    /** Returns true exactly once per beam if the player is caught in the laser's path. */
-    public boolean consumeLaserHit() {
-        if (attackState == AttackState.FIRING_LASER && !laserHasHitPlayer) {
-            laserHasHitPlayer = true;
-            return true;
+    public AttackType getCurrentAttack() {
+        return currentAttack;
+    }
+
+    public List<int[]> getActiveZones() {
+        return activeZones;
+    }
+
+    /** Returns true exactly once per attack if the player overlaps any active zone. */
+    public boolean consumeHitIfPlayerInZone(int playerX, int playerY, int playerWidth, int playerHeight) {
+        if (attackState != AttackState.FIRING || hasHitPlayer) {
+            return false;
+        }
+        for (int[] zone : activeZones) {
+            if (rectsOverlap(playerX, playerY, playerWidth, playerHeight,
+                    zone[0], zone[1], zone[2], zone[3])) {
+                hasHitPlayer = true;
+                return true;
+            }
         }
         return false;
     }
 
-    @Override
-    public Bomb maybeDropBomb() {
-        Bomb bomb = super.maybeDropBomb();
-        if (bomb != null) {
-            bomb.setX(this.x + WIDTH / 2);
-            bomb.setY(this.y + HEIGHT / 2);
-        }
-        return bomb;
+    private boolean rectsOverlap(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2) {
+        return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
     }
 }

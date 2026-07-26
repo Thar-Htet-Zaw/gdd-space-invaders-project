@@ -1,4 +1,3 @@
-
 package gdd.scene;
  
 import gdd.AudioPlayer;
@@ -24,6 +23,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.Graphics;
+import java.awt.Image;
 import java.awt.Toolkit;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
@@ -360,32 +360,57 @@ public class Scene1 extends JPanel {
     }
  
     private void drawAliens(Graphics g) {
- 
+
         for (Enemy enemy : enemies) {
- 
+
             if (enemy.isVisible()) {
- 
-                g.drawImage(enemy.getImage(), enemy.getX(), enemy.getY(), this);
+
+                enemy.tickAnimation();
+
+                // Subtle "breathing" pulse -- a pure-drawing transform on the existing
+                // sprite image (no new art). Small amplitude so it reads as alive
+                // rather than glitchy.
+                double pulse = 1.0 + 0.06 * Math.sin(enemy.getAnimFrame() * 0.15);
+                Image img = enemy.getImage();
+                int baseW = img.getWidth(this);
+                int baseH = img.getHeight(this);
+                int w = (int) (baseW * pulse);
+                int h = (int) (baseH * pulse);
+                int drawX = enemy.getX() - (w - baseW) / 2;
+                int drawY = enemy.getY() - (h - baseH) / 2;
+
+                g.drawImage(img, drawX, drawY, w, h, this);
             }
- 
+
             if (enemy.isDying()) {
- 
+
                 enemy.die();
             }
         }
     }
  
     private void drawPowreUps(Graphics g) {
- 
+
         for (PowerUp p : powerups) {
- 
+
             if (p.isVisible()) {
- 
-                g.drawImage(p.getImage(), p.getX(), p.getY(), this);
+
+                p.tickAnimation();
+
+                // Fake "coin spin" -- squash horizontally with a cosine wave to
+                // simulate rotation using the existing icon, no new art needed.
+                double scaleX = Math.abs(Math.cos(p.getAnimFrame() * 0.08));
+                Image img = p.getImage();
+                int baseW = img.getWidth(this);
+                int baseH = img.getHeight(this);
+                int w = Math.max(2, (int) (baseW * scaleX));
+                int drawX = p.getX() + (baseW - w) / 2;
+
+                g.drawImage(img, drawX, p.getY(), w, baseH, this);
             }
- 
+
             if (p.isDying()) {
- 
+
                 p.die();
             }
         }
@@ -393,6 +418,8 @@ public class Scene1 extends JPanel {
  
     private void drawPlayer(Graphics g) {
         if (player != null && player.isVisible()) {
+            player.tickAnimation();
+
             Graphics2D g2d = (Graphics2D) g.create();
             
             // Get player coordinates and image dimensions
@@ -403,9 +430,17 @@ public class Scene1 extends JPanel {
  
             // Rotate around the center of the player ship
             g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
-            
+
+            // Subtle engine-thrust pulse -- scales the ship slightly each frame.
+            // Pure drawing transform, no new art needed.
+            double pulse = 1.0 + 0.04 * Math.sin(player.getAnimFrame() * 0.3);
+            int w = (int) (width * pulse);
+            int h = (int) (height * pulse);
+            int dx = x - (w - width) / 2;
+            int dy = y - (h - height) / 2;
+
             // Draw the player
-            g2d.drawImage(player.getImage(), x, y, this);
+            g2d.drawImage(player.getImage(), dx, dy, w, h, this);
             
             // Dispose the graphics context copy
             g2d.dispose();
@@ -413,20 +448,26 @@ public class Scene1 extends JPanel {
     }
  
     private void drawShot(Graphics g) {
- 
+
         // Inside Scene1.java where you draw shots:
         for (Shot shot : shots) {
             if (shot.isVisible()) {
+                shot.tickAnimation();
+
                 Graphics2D g2d = (Graphics2D) g.create();
- 
+
                 int x = shot.getX();
                 int y = shot.getY();
                 int width = shot.getImage().getWidth(null);
                 int height = shot.getImage().getHeight(null);
- 
+
                 // Rotate 90 degrees so the vertical line becomes horizontal
                 g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
- 
+
+                // Faint trailing streak behind the bolt -- pure drawing, no new art.
+                g2d.setColor(new Color(255, 255, 150, 90));
+                g2d.fillRect(x - 12, y + height / 2 - 2, 12, 4);
+
                 g2d.drawImage(shot.getImage(), x, y, this);
                 g2d.dispose();
             }
@@ -436,7 +477,20 @@ public class Scene1 extends JPanel {
     private void drawBombs(Graphics g) {
         for (Bomb bomb : bombs) {
             if (bomb.isVisible()) {
-                g.drawImage(bomb.getImage(), bomb.getX(), bomb.getY(), this);
+                bomb.tickAnimation();
+
+                // Small pulse so the bomb reads as active/dangerous, not a
+                // frozen icon. Pure drawing transform, no new art.
+                double pulse = 1.0 + 0.15 * Math.sin(bomb.getAnimFrame() * 0.4);
+                Image img = bomb.getImage();
+                int baseW = img.getWidth(this);
+                int baseH = img.getHeight(this);
+                int w = (int) (baseW * pulse);
+                int h = (int) (baseH * pulse);
+                int drawX = bomb.getX() - (w - baseW) / 2;
+                int drawY = bomb.getY() - (h - baseH) / 2;
+
+                g.drawImage(img, drawX, drawY, w, h, this);
             }
         }
     }
@@ -452,20 +506,42 @@ public class Scene1 extends JPanel {
     }
  
     private void drawExplosions(Graphics g) {
- 
+
         List<Explosion> toRemove = new ArrayList<>();
- 
+
         for (Explosion explosion : explosions) {
- 
+
             if (explosion.isVisible()) {
-                g.drawImage(explosion.getImage(), explosion.getX(), explosion.getY(), this);
+                explosion.tickAnimation();
+
+                // Grow-and-fade burst -- the existing explosion image is drawn
+                // larger and more transparent each frame of its short lifetime.
+                // Pure drawing, no new art (no sprite sheet needed).
+                int lifeFrames = 10; // matches Sprite's default visibleFrames countdown
+                float progress = Math.min(1f, explosion.getAnimFrame() / (float) lifeFrames);
+                double scale = 0.6 + 0.9 * progress;
+                float alpha = Math.max(0f, 1f - progress);
+
+                Image img = explosion.getImage();
+                int baseW = img.getWidth(this);
+                int baseH = img.getHeight(this);
+                int w = (int) (baseW * scale);
+                int h = (int) (baseH * scale);
+                int drawX = explosion.getX() - (w - baseW) / 2;
+                int drawY = explosion.getY() - (h - baseH) / 2;
+
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+                g2d.drawImage(img, drawX, drawY, w, h, this);
+                g2d.dispose();
+
                 explosion.visibleCountDown();
                 if (!explosion.isVisible()) {
                     toRemove.add(explosion);
                 }
             }
         }
- 
+
         explosions.removeAll(toRemove);
     }
  

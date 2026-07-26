@@ -19,6 +19,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -238,12 +239,35 @@ public class Scene2 extends JPanel {
     private void drawEnemies(Graphics g) {
         for (Enemy enemy : enemies) {
             if (enemy.isVisible()) {
+                enemy.tickAnimation();
+
                 if (enemy instanceof Boss) {
+                    Boss boss = (Boss) enemy;
+
+                    // Pulse harder once enraged (phase 2) for extra visual feedback.
+                    // Pure drawing transform on the existing boss image, no new art.
+                    double amp = boss.isPhaseTwo() ? 0.03 : 0.015;
+                    double pulse = 1.0 + amp * Math.sin(boss.getAnimFrame() * 0.2);
+                    int w = (int) (Boss.WIDTH * pulse);
+                    int h = (int) (Boss.HEIGHT * pulse);
+                    double centerX = boss.getX() + Boss.WIDTH / 2.0;
+                    double centerY = boss.getY() + Boss.HEIGHT / 2.0;
+                    int drawX = (int) (centerX - w / 2.0);
+                    int drawY = (int) (centerY - h / 2.0);
+
                     // Flip horizontally so the boss faces left, toward the player
-                    g.drawImage(enemy.getImage(), enemy.getX() + Boss.WIDTH, enemy.getY(),
-                            -Boss.WIDTH, Boss.HEIGHT, this);
+                    g.drawImage(boss.getImage(), drawX + w, drawY, -w, h, this);
                 } else {
-                    g.drawImage(enemy.getImage(), enemy.getX(), enemy.getY(), this);
+                    // Subtle "breathing" pulse -- pure drawing transform, no new art.
+                    double pulse = 1.0 + 0.06 * Math.sin(enemy.getAnimFrame() * 0.15);
+                    Image img = enemy.getImage();
+                    int baseW = img.getWidth(this);
+                    int baseH = img.getHeight(this);
+                    int w = (int) (baseW * pulse);
+                    int h = (int) (baseH * pulse);
+                    int drawX = enemy.getX() - (w - baseW) / 2;
+                    int drawY = enemy.getY() - (h - baseH) / 2;
+                    g.drawImage(img, drawX, drawY, w, h, this);
                 }
             }
 
@@ -256,13 +280,28 @@ public class Scene2 extends JPanel {
     private void drawBombs(Graphics g) {
         for (Bomb bomb : bombs) {
             if (bomb.isVisible()) {
-                g.drawImage(bomb.getImage(), bomb.getX(), bomb.getY(), this);
+                bomb.tickAnimation();
+
+                // Small pulse so the bomb reads as active/dangerous, not a
+                // frozen icon. Pure drawing transform, no new art.
+                double pulse = 1.0 + 0.15 * Math.sin(bomb.getAnimFrame() * 0.4);
+                Image img = bomb.getImage();
+                int baseW = img.getWidth(this);
+                int baseH = img.getHeight(this);
+                int w = (int) (baseW * pulse);
+                int h = (int) (baseH * pulse);
+                int drawX = bomb.getX() - (w - baseW) / 2;
+                int drawY = bomb.getY() - (h - baseH) / 2;
+
+                g.drawImage(img, drawX, drawY, w, h, this);
             }
         }
     }
 
     private void drawPlayer(Graphics g) {
         if (player != null && player.isVisible()) {
+            player.tickAnimation();
+
             Graphics2D g2d = (Graphics2D) g.create();
 
             int x = player.getX();
@@ -272,7 +311,16 @@ public class Scene2 extends JPanel {
 
             // Rotate to face right, matching Scene1's orientation fix
             g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
-            g2d.drawImage(player.getImage(), x, y, this);
+
+            // Subtle engine-thrust pulse -- scales the ship slightly each frame.
+            // Pure drawing transform, no new art needed.
+            double pulse = 1.0 + 0.04 * Math.sin(player.getAnimFrame() * 0.3);
+            int w = (int) (width * pulse);
+            int h = (int) (height * pulse);
+            int dx = x - (w - width) / 2;
+            int dy = y - (h - height) / 2;
+
+            g2d.drawImage(player.getImage(), dx, dy, w, h, this);
             g2d.dispose();
         }
     }
@@ -280,6 +328,8 @@ public class Scene2 extends JPanel {
     private void drawShots(Graphics g) {
         for (Shot shot : shots) {
             if (shot.isVisible()) {
+                shot.tickAnimation();
+
                 Graphics2D g2d = (Graphics2D) g.create();
 
                 int x = shot.getX();
@@ -288,6 +338,11 @@ public class Scene2 extends JPanel {
                 int height = shot.getImage().getHeight(null);
 
                 g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
+
+                // Faint trailing streak behind the bolt -- pure drawing, no new art.
+                g2d.setColor(new Color(255, 255, 150, 90));
+                g2d.fillRect(x - 12, y + height / 2 - 2, 12, 4);
+
                 g2d.drawImage(shot.getImage(), x, y, this);
                 g2d.dispose();
             }
@@ -399,22 +454,47 @@ public class Scene2 extends JPanel {
         }
     }
 
-    private void drawBossLaser(Graphics g) {
+    private void drawBossAttack(Graphics g) {
         Boss boss = findBoss();
         if (boss == null || !boss.isVisible()) {
             return;
         }
 
-        if (boss.isChargingLaser()) {
-            // Telegraph: flashing warning band at the target row, so the player can dodge in time
-            if (frame % 10 < 5) {
-                g.setColor(new Color(255, 0, 0, 120));
-                g.fillRect(0, boss.getLaserTargetY() - Boss.LASER_HEIGHT / 2, BOARD_WIDTH, Boss.LASER_HEIGHT);
+        if (!boss.isCharging() && !boss.isFiring()) {
+            return;
+        }
+
+        boolean charging = boss.isCharging();
+
+        // Flicker while charging (telegraph warning), solid while firing
+        if (charging && frame % 10 >= 5) {
+            return;
+        }
+
+        Color color;
+        switch (boss.getCurrentAttack()) {
+            case TENTACLE_SLAM:
+                color = charging ? new Color(0, 100, 0, 120) : new Color(0, 180, 0, 220);
+                break;
+            case EYE_BEAM_BARRAGE:
+                color = charging ? new Color(150, 0, 200, 120) : new Color(200, 0, 255, 220);
+                break;
+            case SPORE_SWARM:
+                color = charging ? new Color(100, 200, 0, 120) : new Color(140, 255, 0, 220);
+                break;
+            case LASER:
+            default:
+                color = charging ? new Color(255, 0, 0, 120) : new Color(255, 60, 0, 220);
+                break;
+        }
+
+        g.setColor(color);
+        for (int[] zone : boss.getActiveZones()) {
+            if (boss.getCurrentAttack() == Boss.AttackType.SPORE_SWARM) {
+                g.fillOval(zone[0], zone[1], zone[2], zone[3]);
+            } else {
+                g.fillRect(zone[0], zone[1], zone[2], zone[3]);
             }
-        } else if (boss.isFiringLaser()) {
-            // Full-strength active beam
-            g.setColor(new Color(255, 60, 0, 220));
-            g.fillRect(0, boss.getLaserTargetY() - Boss.LASER_HEIGHT / 2, BOARD_WIDTH, Boss.LASER_HEIGHT);
         }
     }
 
@@ -446,7 +526,7 @@ public class Scene2 extends JPanel {
 
             drawEnemies(g);
             drawBombs(g);
-            drawBossLaser(g);
+            drawBossAttack(g);
             drawPlayer(g);
             drawShots(g);
             drawHealthBar(g);
@@ -593,21 +673,7 @@ public class Scene2 extends JPanel {
         // Boss-specific behavior: minion spawning + laser telegraph attack (phase 2 only)
         Boss boss = findBoss();
         if (boss != null && boss.isVisible()) {
-
-            if (!bossMusicStarted) {
-                try {
-                    if (audioPlayer != null) {
-                        audioPlayer.stop(); // Stop stage2.wav[cite: 19]
-                    }
-                    audioPlayer = new AudioPlayer(Global.AUD_BOSS); // Start boss-battle.wav
-                    audioPlayer.play();
-                    bossMusicStarted = true;
-                } catch (Exception e) {
-                    System.err.println("Error switching to boss music: " + e.getMessage());
-                }
-            }
-
-            boss.updateAttack(player.getY());
+            boss.updateAttack(player.getX(), player.getY());
 
             String minionType = boss.maybeSpawnMinionType();
             if (minionType != null) {
@@ -625,19 +691,13 @@ public class Scene2 extends JPanel {
                 }
             }
 
-            if (boss.isFiringLaser() && player.isVisible()) {
-                int laserY = boss.getLaserTargetY();
-                int playerY = player.getY();
-                if (playerY + PLAYER_HEIGHT >= laserY - Boss.LASER_HEIGHT / 2
-                        && playerY <= laserY + Boss.LASER_HEIGHT / 2) {
-                    if (boss.consumeLaserHit()) {
-                        player.hit();
-                        player.hit(); // laser hits harder than a bomb — meant to be dodged, not tanked
-                        if (player.isDying()) {
-                            var ii = new ImageIcon(IMG_EXPLOSION);
-                            player.setImage(ii.getImage());
-                        }
-                    }
+            if (player.isVisible()
+                    && boss.consumeHitIfPlayerInZone(player.getX(), player.getY(), PLAYER_WIDTH, PLAYER_HEIGHT)) {
+                player.hit();
+                player.hit();
+                if (player.isDying()) {
+                    var ii = new ImageIcon(IMG_EXPLOSION);
+                    player.setImage(ii.getImage());
                 }
             }
         }
