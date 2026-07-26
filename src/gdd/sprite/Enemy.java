@@ -20,7 +20,17 @@ public class Enemy extends Sprite {
 
         // bomb = new Bomb(x, y);
 
-        var ii = new ImageIcon(IMG_ENEMY);
+        loadImage(IMG_ENEMY); // default sprite; subclasses (Alien1/2/3) override this with their own image
+    }
+
+    /**
+     * Loads and scales a sprite image, replacing whatever image this enemy currently has.
+     * Alien1/Alien2/Alien3 each call this with their own image path right after super(x, y),
+     * so every enemy type gets a visually distinct sprite (Scout / Wraith / Juggernaut)
+     * instead of all sharing the same default alien image.
+     */
+    protected void loadImage(String path) {
+        var ii = new ImageIcon(path);
 
         // Scale the image to use the global scaling factor
         var scaledImage = ii.getImage().getScaledInstance(ii.getIconWidth() * SCALE_FACTOR,

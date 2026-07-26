@@ -1,9 +1,12 @@
 package gdd.sprite;
 
+import static gdd.Global.*;
+
 public class Alien1 extends Enemy {
 
     public Alien1(int x, int y) {
         super(x, y);
+        loadImage(IMG_ENEMY_SCOUT); // fast, fragile — sleek sprite
     }
 
     @Override

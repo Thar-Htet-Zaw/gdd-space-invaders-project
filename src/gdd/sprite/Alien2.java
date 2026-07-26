@@ -1,5 +1,7 @@
 package gdd.sprite;
 
+import static gdd.Global.*;
+
 public class Alien2 extends Enemy {
 
     private final int baseY;
@@ -10,6 +12,7 @@ public class Alien2 extends Enemy {
 
     public Alien2(int x, int y) {
         super(x, y); // Enemy's constructor already sets position + scaled sprite image
+        loadImage(IMG_ENEMY_WRAITH); // zigzagging — ghostly sprite
         this.baseY = y;
     }
 
