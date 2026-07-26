@@ -48,6 +48,17 @@ public class Boss extends Enemy {
     private static final int FIRE_FRAMES = 20;         // ~0.33s active damage window
     private static final int COOLDOWN_PHASE1 = 240;    // ~4s between attacks
     private static final int COOLDOWN_PHASE2 = 150;    // ~2.5s once enraged — faster pace
+    private static final int COOLDOWN_PHASE3 = 100;    // ~1.7s once desperate (<=20% HP) — relentless
+
+    private static final int INITIAL_GRACE_FRAMES = 90; // ~1.5s buffer after engaging before the very first attack
+    private static final int COMBO_GAP = 45;              // ~0.75s gap between two chained attacks
+    private static final int MAX_COMBO_CHAIN = 1;         // at most 1 extra attack chained on, then a full cooldown
+
+    private AttackType lastAttack = null;   // used so the same attack never fires twice in a row
+    private boolean hasAttackedOnce = false; // gates the one-time initial grace period
+    private boolean comboPending = false;    // true = next attack uses the short COMBO_GAP, not a full cooldown
+    private int comboChainCount = 0;
+    private boolean phaseThree = false;      // "desperation" — HP at/below 20%, faster + always combos
 
     public Boss(int x, int y, int startingHitPoints) {
         super(x, y);
@@ -64,10 +75,19 @@ public class Boss extends Enemy {
 
     @Override
     public boolean hit() {
+        if (!hasEngaged()) {
+            // Still flying in — not fighting yet, so it can't be damaged. Prevents the
+            // player from melting a big chunk of its health before the fight even starts.
+            return false;
+        }
+
         boolean died = super.hit();
 
         if (!phaseTwo && !died && getHitPoints() <= maxHitPoints / 2) {
             phaseTwo = true;
+        }
+        if (!phaseThree && !died && getHitPoints() <= maxHitPoints * 0.2) {
+            phaseThree = true;
         }
 
         return died;
@@ -95,6 +115,10 @@ public class Boss extends Enemy {
         return phaseTwo;
     }
 
+    public boolean isPhaseThree() {
+        return phaseThree;
+    }
+
     public boolean hasEngaged() {
         return this.x <= engageX;
     }
@@ -114,7 +138,8 @@ public class Boss extends Enemy {
         if (!phaseTwo || !hasEngaged()) {
             return null;
         }
-        if (minionRandomizer.nextInt(MINION_CHANCE_RANGE) == 0) {
+        int chanceRange = phaseThree ? MINION_CHANCE_RANGE / 2 : MINION_CHANCE_RANGE; // phase 3: roughly double the odds
+        if (minionRandomizer.nextInt(chanceRange) == 0) {
             int roll = minionRandomizer.nextInt(3);
             return roll == 0 ? "Alien1" : (roll == 1 ? "Alien2" : "Alien3");
         }
@@ -133,7 +158,12 @@ public class Boss extends Enemy {
         switch (attackState) {
             case IDLE:
                 attackTimer++;
-                int cooldown = phaseTwo ? COOLDOWN_PHASE2 : COOLDOWN_PHASE1;
+                int cooldown = comboPending ? COMBO_GAP : baseCooldown();
+                if (!hasAttackedOnce) {
+                    // Give the player a moment to get their bearings before the boss's
+                    // very first attack, regardless of how short phase 1's cooldown is.
+                    cooldown = Math.max(cooldown, INITIAL_GRACE_FRAMES);
+                }
                 if (attackTimer >= cooldown) {
                     startCharging(playerX, playerY);
                 }
@@ -148,6 +178,22 @@ public class Boss extends Enemy {
             case FIRING:
                 attackTimer++;
                 if (attackTimer >= FIRE_FRAMES) {
+                    // Decide whether the NEXT attack chains in quickly (a "combo") or
+                    // waits out a full cooldown. Phase 3 always chains (relentless);
+                    // phase 2 chains sometimes; phase 1 never chains. Capped at
+                    // MAX_COMBO_CHAIN so combos can't stack indefinitely and become unfair.
+                    if (phaseThree && comboChainCount < MAX_COMBO_CHAIN) {
+                        comboPending = true;
+                        comboChainCount++;
+                    } else if (phaseTwo && !phaseThree && comboChainCount < MAX_COMBO_CHAIN
+                            && attackRandomizer.nextInt(100) < 35) {
+                        comboPending = true;
+                        comboChainCount++;
+                    } else {
+                        comboPending = false;
+                        comboChainCount = 0;
+                    }
+
                     attackState = AttackState.IDLE;
                     attackTimer = 0;
                     activeZones.clear();
@@ -156,18 +202,39 @@ public class Boss extends Enemy {
         }
     }
 
+    private int baseCooldown() {
+        if (phaseThree) {
+            return COOLDOWN_PHASE3;
+        }
+        if (phaseTwo) {
+            return COOLDOWN_PHASE2;
+        }
+        return COOLDOWN_PHASE1;
+    }
+
     private void startCharging(int playerX, int playerY) {
         attackState = AttackState.CHARGING;
         attackTimer = 0;
         hasHitPlayer = false;
+        hasAttackedOnce = true;
         activeZones.clear();
 
         if (!phaseTwo) {
             currentAttack = AttackType.LASER; // phase 1: laser only
         } else {
-            AttackType[] options = AttackType.values();
-            currentAttack = options[attackRandomizer.nextInt(options.length)];
+            // Pick uniformly among all attacks EXCEPT whichever one just fired, so the
+            // same attack never happens twice in a row — keeps the pattern feeling
+            // designed rather than a dice roll that can streak on one attack.
+            AttackType[] all = AttackType.values();
+            List<AttackType> candidates = new ArrayList<>();
+            for (AttackType type : all) {
+                if (type != lastAttack) {
+                    candidates.add(type);
+                }
+            }
+            currentAttack = candidates.get(attackRandomizer.nextInt(candidates.size()));
         }
+        lastAttack = currentAttack;
 
         switch (currentAttack) {
             case LASER:

@@ -68,7 +68,7 @@ public class Scene2 extends JPanel {
 
     private final Random randomizer = new Random();
     private HashMap<Integer, SpawnDetails> spawnMap = new HashMap<>();
-    private static final int BOSS_HIT_POINTS = 40;
+    private static final int BOSS_HIT_POINTS = 100;
     private int bossSpawnFrame;
     private static final int WARNING_DURATION_FRAMES = 180; // ~3s flickering warning before boss arrives
 
@@ -589,8 +589,8 @@ public class Scene2 extends JPanel {
                 float alpha = Math.max(0f, 1f - progress);
 
                 Image img = explosion.getImage();
-                int baseW = img.getWidth(this);
-                int baseH = img.getHeight(this);
+                int baseW = Explosion.getExplosionSize();
+                int baseH = Explosion.getExplosionSize();
                 int w = (int) (baseW * scale);
                 int h = (int) (baseH * scale);
                 int drawX = explosion.getX() - (w - baseW) / 2;
