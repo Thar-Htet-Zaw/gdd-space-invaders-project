@@ -42,6 +42,9 @@ public class Scene2 extends JPanel {
     private List<Shot> shots;
     private List<Bomb> bombs;
 
+    private AudioPlayer audioPlayer;
+    private boolean bossMusicStarted = false;
+
     private int frame = 0;
     private int deaths = 0;
     private int scoutKills = 0;
@@ -108,12 +111,29 @@ public class Scene2 extends JPanel {
     }
 
     public void start() {
+        try {
+            if (audioPlayer != null) {
+                audioPlayer.stop();
+            }
+            audioPlayer = new AudioPlayer(Global.AUD_SCENE2);
+            audioPlayer.play();
+        } catch (Exception e) {
+            System.err.println("Error playing Stage 2 audio: " + e.getMessage());
+        }
+        bossMusicStarted = false;
         timer.start();
     }
 
     public void stop() {
         if (timer != null) {
             timer.stop();
+        }
+        if (audioPlayer != null) {
+            try {
+                audioPlayer.stop();
+            } catch (Exception e) {
+                System.err.println("Error stopping Stage 2 audio: " + e.getMessage());
+            }
         }
     }
 
@@ -164,7 +184,20 @@ public class Scene2 extends JPanel {
         score = 0;
         inGame = true;
         message = "Game Over";
-        gameInit(); // spawnMap itself is untouched and reused correctly since frame resets to 0
+        bossMusicStarted = false;
+        
+        // Reset back to Stage 2 background music
+        try {
+            if (audioPlayer != null) {
+                audioPlayer.stop();
+            }
+            audioPlayer = new AudioPlayer(Global.AUD_SCENE2);
+            audioPlayer.play();
+        } catch (Exception e) {
+            System.err.println("Error resetting audio: " + e.getMessage());
+        }
+
+        gameInit(); 
         timer.start();
     }
 
@@ -560,6 +593,20 @@ public class Scene2 extends JPanel {
         // Boss-specific behavior: minion spawning + laser telegraph attack (phase 2 only)
         Boss boss = findBoss();
         if (boss != null && boss.isVisible()) {
+
+            if (!bossMusicStarted) {
+                try {
+                    if (audioPlayer != null) {
+                        audioPlayer.stop(); // Stop stage2.wav[cite: 19]
+                    }
+                    audioPlayer = new AudioPlayer(Global.AUD_BOSS); // Start boss-battle.wav
+                    audioPlayer.play();
+                    bossMusicStarted = true;
+                } catch (Exception e) {
+                    System.err.println("Error switching to boss music: " + e.getMessage());
+                }
+            }
+
             boss.updateAttack(player.getY());
 
             String minionType = boss.maybeSpawnMinionType();

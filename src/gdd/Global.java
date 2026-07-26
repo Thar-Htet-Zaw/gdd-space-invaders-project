@@ -46,4 +46,6 @@ public class Global {
     public static final String AUD_EXPLODE = "src/audio/explode.wav";
     public static final String AUD_GAMEOVER = "src/audio/gameover-sound.wav";
     public static final String AUD_LEVEL_UP = "src/audio/level-up.wav";
+    public static final String AUD_SCENE2 = "src/audio/stage2.wav";
+    public static final String AUD_BOSS = "src/audio/boss-battle.wav";
 }
