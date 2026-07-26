@@ -10,10 +10,12 @@ import gdd.sprite.Alien2;
 import gdd.sprite.Alien3;
 import gdd.sprite.Boss;
 import gdd.sprite.Enemy;
+import gdd.sprite.Explosion;
 import gdd.sprite.Enemy.Bomb;
 import gdd.sprite.Player;
 import gdd.sprite.Shot;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -259,20 +261,7 @@ public class Scene2 extends JPanel {
 
                 if (enemy instanceof Boss) {
                     Boss boss = (Boss) enemy;
-
-                    // Pulse harder once enraged (phase 2) for extra visual feedback.
-                    // Pure drawing transform on the existing boss image, no new art.
-                    double amp = boss.isPhaseTwo() ? 0.03 : 0.015;
-                    double pulse = 1.0 + amp * Math.sin(boss.getAnimFrame() * 0.2);
-                    int w = (int) (Boss.WIDTH * pulse);
-                    int h = (int) (Boss.HEIGHT * pulse);
-                    double centerX = boss.getX() + Boss.WIDTH / 2.0;
-                    double centerY = boss.getY() + Boss.HEIGHT / 2.0;
-                    int drawX = (int) (centerX - w / 2.0);
-                    int drawY = (int) (centerY - h / 2.0);
-
-                    // Flip horizontally so the boss faces left, toward the player
-                    g.drawImage(boss.getImage(), drawX + w, drawY, -w, h, this);
+                    drawBossAnimated(g, boss);
                 } else {
                     // Subtle "breathing" pulse -- pure drawing transform, no new art.
                     double pulse = 1.0 + 0.06 * Math.sin(enemy.getAnimFrame() * 0.15);
@@ -290,6 +279,58 @@ public class Scene2 extends JPanel {
             if (enemy.isDying()) {
                 enemy.die();
             }
+        }
+    }
+
+    /**
+     * Draws the boss as a set of thin horizontal strips, each offset left/right by a
+     * sine wave whose amplitude grows toward the bottom of the image (where the
+     * tentacles are) and stays near-zero at the top (the head). This makes the
+     * tentacles appear to ripple/sway independently while the head stays relatively
+     * anchored -- pure drawing, no new art or sprite sheet needed.
+     */
+    private void drawBossAnimated(Graphics g, Boss boss) {
+        Image img = boss.getImage();
+        int srcW = Boss.WIDTH;
+        int srcH = Boss.HEIGHT;
+
+        // Overall gentle pulse (kept, but subtler now that the tentacle wave carries
+        // most of the "alive" feeling), stronger once enraged.
+        double amp = boss.isPhaseTwo() ? 0.02 : 0.01;
+        double pulse = 1.0 + amp * Math.sin(boss.getAnimFrame() * 0.2);
+        int w = (int) (srcW * pulse);
+        int h = (int) (srcH * pulse);
+        double centerX = boss.getX() + srcW / 2.0;
+        double centerY = boss.getY() + srcH / 2.0;
+        int baseDrawX = (int) (centerX - w / 2.0);
+        int baseDrawY = (int) (centerY - h / 2.0);
+
+        int strips = 40;
+        int stripSrcH = Math.max(1, srcH / strips);
+        int stripDstH = Math.max(1, h / strips);
+
+        float waveSpeed = boss.isPhaseTwo() ? 0.25f : 0.15f; // ripples faster once enraged
+        float waveFrequency = 0.35f; // how tightly packed the ripples are, strip to strip
+
+        for (int i = 0; i < strips; i++) {
+            int srcY1 = i * stripSrcH;
+            int srcY2 = Math.min(srcH, srcY1 + stripSrcH);
+            int dstY1 = baseDrawY + i * stripDstH;
+            int dstY2 = dstY1 + stripDstH;
+
+            // Amplitude eases in from 0 (top/head) to full strength (bottom/tentacles)
+            float verticalProgress = (float) i / strips;
+            float stripAmplitude = 18f * verticalProgress * verticalProgress;
+
+            int xOffset = (int) (stripAmplitude * Math.sin(boss.getAnimFrame() * waveSpeed + i * waveFrequency));
+
+            // Destination x1 > x2 flips this strip horizontally, same principle as the
+            // old whole-image flip, just applied per-strip so each can also carry its
+            // own wave offset.
+            g.drawImage(img,
+                    baseDrawX + xOffset + w, dstY1, baseDrawX + xOffset, dstY2,
+                    0, srcY1, srcW, srcY2,
+                    this);
         }
     }
 
@@ -354,10 +395,6 @@ public class Scene2 extends JPanel {
                 int height = shot.getImage().getHeight(null);
 
                 g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
-
-                // Faint trailing streak behind the bolt -- pure drawing, no new art.
-                g2d.setColor(new Color(255, 255, 150, 90));
-                g2d.fillRect(x - 12, y + height / 2 - 2, 12, 4);
 
                 g2d.drawImage(shot.getImage(), x, y, this);
                 g2d.dispose();
@@ -440,11 +477,17 @@ public class Scene2 extends JPanel {
         g.setColor(Color.WHITE);
         g.drawString(timeText, BOARD_WIDTH - fmTimer.stringWidth(timeText) - 10, 20);
 
-        var scoreFont = new Font("Helvetica", Font.PLAIN, 14);
+       var scoreFont = new Font("Helvetica", Font.PLAIN, 14);
         g.setFont(scoreFont);
         var fmScore = g.getFontMetrics(scoreFont);
         String scoreText = "Score: " + score;
         g.drawString(scoreText, BOARD_WIDTH - fmScore.stringWidth(scoreText) - 10, 40);
+
+        // Speed and Shots-upgrade level, same corner, under the score
+        String speedText = "Speed: " + player.getSpeed();
+        g.drawString(speedText, BOARD_WIDTH - fmScore.stringWidth(speedText) - 10, 60);
+        String shotsText = "Shots: " + player.getMaxShots();
+        g.drawString(shotsText, BOARD_WIDTH - fmScore.stringWidth(shotsText) - 10, 80);
     }
 
     private String formatTime(int frames) {
@@ -530,11 +573,42 @@ public class Scene2 extends JPanel {
         doDrawing(g);
     }
 
-    // 1. Add the helper method here (above doDrawing)
     private void drawExplosions(Graphics g) {
-        for (Explosion exp : explosions) {
-            g.drawImage(exp.getImage(), exp.getX(), exp.getY(), this);
+
+        List<Explosion> toRemove = new ArrayList<>();
+
+        for (Explosion explosion : explosions) {
+
+            if (explosion.isVisible()) {
+                explosion.tickAnimation();
+
+                // Grow-and-fade burst -- matches Scene1's explosion animation.
+                int lifeFrames = 10; // matches Sprite's default visibleFrames countdown
+                float progress = Math.min(1f, explosion.getAnimFrame() / (float) lifeFrames);
+                double scale = 0.6 + 0.9 * progress;
+                float alpha = Math.max(0f, 1f - progress);
+
+                Image img = explosion.getImage();
+                int baseW = img.getWidth(this);
+                int baseH = img.getHeight(this);
+                int w = (int) (baseW * scale);
+                int h = (int) (baseH * scale);
+                int drawX = explosion.getX() - (w - baseW) / 2;
+                int drawY = explosion.getY() - (h - baseH) / 2;
+
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+                g2d.drawImage(img, drawX, drawY, w, h, this);
+                g2d.dispose();
+
+                explosion.visibleCountDown();
+                if (!explosion.isVisible()) {
+                    toRemove.add(explosion);
+                }
+            }
         }
+
+        explosions.removeAll(toRemove);
     }
 
     private void doDrawing(Graphics g) {
@@ -803,7 +877,9 @@ public class Scene2 extends JPanel {
                 player.hit();
                 if (player.isDying()) {
                     var ii = new ImageIcon(IMG_EXPLOSION);
-                    player.setImage(ii.getImage());
+                    var scaledDeathImg = ii.getImage().getScaledInstance(
+                            PLAYER_WIDTH, PLAYER_HEIGHT, java.awt.Image.SCALE_SMOOTH);
+                    player.setImage(scaledDeathImg);
                 }
             }
         }
@@ -835,7 +911,9 @@ public class Scene2 extends JPanel {
 
                 if (player.isDying()) {
                     var ii = new ImageIcon(IMG_EXPLOSION);
-                    player.setImage(ii.getImage());
+                    var scaledDeathImg = ii.getImage().getScaledInstance(
+                            PLAYER_WIDTH, PLAYER_HEIGHT, java.awt.Image.SCALE_SMOOTH);
+                    player.setImage(scaledDeathImg);
                 }
             } else if (bombX < 0) {
                 bomb.die();
@@ -895,15 +973,6 @@ public class Scene2 extends JPanel {
         }
 
 
-        List<Explosion> expiredExplosions = new ArrayList<>();
-        for (Explosion exp : explosions) {
-            exp.update();
-            if (exp.isExpired()) {
-                expiredExplosions.add(exp);
-            }
-        }
-        explosions.removeAll(expiredExplosions);
-
         frame++;
     }
 
@@ -916,34 +985,6 @@ public class Scene2 extends JPanel {
         @Override
         public void actionPerformed(ActionEvent e) {
             doGameCycle();
-        }
-    }
-
-    // --- ADD THE EXPLOSION CLASS HERE ---
-    private class Explosion {
-        private int x, y;
-        private int timer = 12; // ~0.2 seconds visual burst
-        private Image image;
-
-        public Explosion(int x, int y) {
-            this.x = x;
-            this.y = y;
-            
-            ImageIcon ii = new ImageIcon(IMG_EXPLOSION);
-            // Scale the explosion to match enemy sprite dimensions
-            this.image = ii.getImage().getScaledInstance(32, 32, Image.SCALE_FAST);
-        }
-
-        public int getX() { return x; }
-        public int getY() { return y; }
-        public Image getImage() { return image; }
-
-        public void update() {
-            timer--;
-        }
-
-        public boolean isExpired() {
-            return timer <= 0;
         }
     }
 

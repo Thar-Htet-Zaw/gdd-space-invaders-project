@@ -34,12 +34,12 @@ public class Global {
     public static final String IMG_ENEMY_WRAITH = "src/images/alien-wraith.png";
     public static final String IMG_ENEMY_JUGGERNAUT = "src/images/alien-juggernaut.png";
     public static final String IMG_PLAYER = "src/images/player_spaceship.png";
-    public static final String IMG_SHOT = "src/images/shot.png";
-    public static final String IMG_EXPLOSION = "src/images/explosion.png";
+    public static final String IMG_SHOT = "src/images/player_shot.png";
+    public static final String IMG_EXPLOSION = "src/images/reworked_explosion.png";
     public static final String IMG_TITLE = "src/images/title.png";
     public static final String IMG_POWERUP_SPEEDUP = "src/images/powerup-s.png";
     public static final String IMG_POWERUP_MULTISHOT = "src/images/powerup-m.png";
-    public static final String IMG_BOMB = "src/images/bomb.png";
+    public static final String IMG_BOMB = "src/images/enemy_bomb.png";
     public static final String IMG_BOSS = "src/images/boss.png";
     public static final String IMG_GAME_OVER = "src/images/gameover.png";
 

@@ -465,10 +465,6 @@ public class Scene1 extends JPanel {
                 // Rotate 90 degrees so the vertical line becomes horizontal
                 g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
 
-                // Faint trailing streak behind the bolt -- pure drawing, no new art.
-                g2d.setColor(new Color(255, 255, 150, 90));
-                g2d.fillRect(x - 12, y + height / 2 - 2, 12, 4);
-
                 g2d.drawImage(shot.getImage(), x, y, this);
                 g2d.dispose();
             }
@@ -616,6 +612,13 @@ public class Scene1 extends JPanel {
         var fmScore = g.getFontMetrics(scoreFont);
         String scoreText = "Score: " + score;
         g.drawString(scoreText, BOARD_WIDTH - fmScore.stringWidth(scoreText) - 10, 45);
+
+        // Speed and Shots-upgrade level, same corner, under the score
+        String speedText = "Speed: " + player.getSpeed();
+        g.drawString(speedText, BOARD_WIDTH - fmScore.stringWidth(speedText) - 10, 65);
+        String shotsText = "Shots: " + player.getMaxShots();
+        g.drawString(shotsText, BOARD_WIDTH - fmScore.stringWidth(shotsText) - 10, 85);
+        
     }
  
     private void drawHealthBar(Graphics g) {
@@ -706,7 +709,7 @@ public class Scene1 extends JPanel {
         int panelX = 80;
         int panelY = 120;
         int panelWidth = BOARD_WIDTH - 160;
-        int panelHeight = 380;
+        int panelHeight = 440;
  
         g.setColor(new Color(0, 32, 48));
         g.fillRect(panelX, panelY, panelWidth, panelHeight);
@@ -745,8 +748,12 @@ public class Scene1 extends JPanel {
         lineY += lineGap;
         g.drawString("Shots Fired: " + shotsFired + "   Accuracy: " + accuracy + "%", lineX, lineY);
         lineY += lineGap;
-        g.drawString("Health Remaining: " + Math.max(0, player.getHealth()) + " / 5", lineX, lineY);
- 
+       g.drawString("Health Remaining: " + Math.max(0, player.getHealth()) + " / 5", lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Final Speed: " + player.getSpeed(), lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Max Simultaneous Shots: " + player.getMaxShots(), lineX, lineY);
+
         // Continue button
         int buttonWidth = 220;
         int buttonHeight = 45;
@@ -913,7 +920,9 @@ public class Scene1 extends JPanel {
                 // 2. Only change the image to an explosion if health reached 0
                 if (player.isDying()) {
                     var ii = new ImageIcon(IMG_EXPLOSION);
-                    player.setImage(ii.getImage());
+                    var scaledDeathImg = ii.getImage().getScaledInstance(
+                            PLAYER_WIDTH, PLAYER_HEIGHT, java.awt.Image.SCALE_SMOOTH);
+                    player.setImage(scaledDeathImg);
                 }
             } else if (bombX < 0) {
                 bomb.die();
@@ -963,8 +972,11 @@ public class Scene1 extends JPanel {
                         boolean enemyDied = enemy.hit(); // decrements HP; true only when HP hits 0
  
                         if (enemyDied) {
-                            var ii = new ImageIcon(IMG_EXPLOSION);
-                            enemy.setImage(ii.getImage());
+                            // NOTE: previously also did enemy.setImage(raw IMG_EXPLOSION) here,
+                            // unscaled. With a small template image that was invisible; with a
+                            // full-res AI-generated image it flashed a giant unscaled sprite for
+                            // one frame. Removed -- the animated Explosion sprite below (already
+                            // scaled to EXPLOSION_SIZE and grow-and-fade animated) is the visual.
                             explosions.add(new Explosion(enemyX, enemyY));
                             deaths++;
  

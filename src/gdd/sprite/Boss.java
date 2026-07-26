@@ -82,12 +82,12 @@ public class Boss extends Enemy {
                 this.x = engageX;
             }
         } else {
-            // In position — slow, smooth elliptical drift (not a fast shake). x/y use
-            // different frequencies + a phase offset so it traces a gentle loop rather
-            // than snapping side to side.
-            swayFrame += 0.015;
-            this.x = engageX + (int) (10 * Math.sin(swayFrame));
-            this.y = baseY + (int) (6 * Math.sin(swayFrame * 1.3 + 1.0));
+            // In position — very subtle drift now (the tentacle-ripple animation in
+            // Scene2's drawBossAnimated() carries most of the "alive" feeling; this is
+            // just a small residual float so the whole body isn't perfectly frozen).
+            swayFrame += 0.01;
+            this.x = engageX + (int) (4 * Math.sin(swayFrame));
+            this.y = baseY + (int) (3 * Math.sin(swayFrame * 1.3 + 1.0));
         }
     }
 
