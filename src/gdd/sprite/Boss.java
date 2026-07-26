@@ -8,17 +8,19 @@ public class Boss extends Enemy {
 
     // Fixed on-screen size, regardless of the source image's resolution — same lesson
     // learned from the power-up icon bug: never scale to the image's own dimensions.
-    public static final int WIDTH = 160;
-    public static final int HEIGHT = 160;
+    // Sized so the boss's head sits just below the boss HP bar (bottom edge at y=95)
+    // and its base sits just above the bottom of the screen (BOARD_HEIGHT=700).
+    public static final int WIDTH = 585;
+    public static final int HEIGHT = 585;
 
     public static final int LASER_HEIGHT = 40; // vertical thickness of the laser beam band
 
     private final int maxHitPoints;
     private boolean phaseTwo = false;
+    private int baseY;
 
-    private final int baseY;
-    private final int engageX; // the boss never advances past this X — stays on the right side
-    private double bobFrame = 0;
+    private final int engageX; // the boss never advances past this X — stays locked in place
+    private double swayFrame = 0;
 
     private static final int APPROACH_SPEED = 2; // speed while first entering, before reaching engageX
     private static final int PHASE1_BOMB_CHANCE_RANGE = 150;
@@ -43,9 +45,8 @@ public class Boss extends Enemy {
         setHitPoints(startingHitPoints);
         this.maxHitPoints = startingHitPoints;
         this.bombChanceRange = PHASE1_BOMB_CHANCE_RANGE;
-        this.baseY = y;
-        this.engageX = BOARD_WIDTH - 220;
-
+        this.engageX = BOARD_WIDTH - WIDTH - 3; // small right-edge margin (shifted further right per feedback)
+        this.baseY = y + 5; // small buffer below the boss HP bar, since there's little vertical room to spare
         // Override the default enemy-sized sprite with a larger, boss-appropriate size.
         var ii = new ImageIcon(IMG_BOSS);
         var scaledImage = ii.getImage().getScaledInstance(WIDTH, HEIGHT, java.awt.Image.SCALE_SMOOTH);
@@ -77,10 +78,12 @@ public class Boss extends Enemy {
                 this.x = engageX;
             }
         } else {
-            // In position — stays on the right side permanently, just bobs gently
-            // so it doesn't look frozen/static.
-            bobFrame += 0.03;
-            this.y = baseY + (int) (25 * Math.sin(bobFrame));
+            // In position — slow, smooth elliptical drift (not a fast shake). x/y use
+            // different frequencies + a phase offset so it traces a gentle loop rather
+            // than snapping side to side.
+            swayFrame += 0.015;
+            this.x = engageX + (int) (10 * Math.sin(swayFrame));
+            this.y = baseY + (int) (6 * Math.sin(swayFrame * 1.3 + 1.0));
         }
     }
 
@@ -163,5 +166,15 @@ public class Boss extends Enemy {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public Bomb maybeDropBomb() {
+        Bomb bomb = super.maybeDropBomb();
+        if (bomb != null) {
+            bomb.setX(this.x + WIDTH / 2);
+            bomb.setY(this.y + HEIGHT / 2);
+        }
+        return bomb;
     }
 }

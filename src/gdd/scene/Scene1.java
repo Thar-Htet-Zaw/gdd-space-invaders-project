@@ -74,7 +74,7 @@ public class Scene1 extends JPanel {
     private long score = 0;
     private int shotsFired = 0;
     private boolean showDashboard = false;
-    private static final int STAGE_DURATION_FRAMES = 5 * 60 * 60; // 5 minutes of survival @ 60 FPS
+    private static final int STAGE_DURATION_FRAMES = 1 * 60 * 60; // TEMP: 1 minute for testing — change back to 5 * 60 * 60 before submitting
     private Rectangle continueButtonBounds;
  
     private final Dimension d = new Dimension(BOARD_WIDTH, BOARD_HEIGHT);

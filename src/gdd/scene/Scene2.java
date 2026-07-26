@@ -145,7 +145,7 @@ public class Scene2 extends JPanel {
         frameCursor += 300; // dramatic pause before the boss
 
         bossSpawnFrame = frameCursor;
-        spawnMap.put(frameCursor, new SpawnDetails("Boss", 720, 300));
+        spawnMap.put(frameCursor, new SpawnDetails("Boss", 720, 100));
     }
 
     private void gameInit() {
@@ -205,7 +205,13 @@ public class Scene2 extends JPanel {
     private void drawEnemies(Graphics g) {
         for (Enemy enemy : enemies) {
             if (enemy.isVisible()) {
-                g.drawImage(enemy.getImage(), enemy.getX(), enemy.getY(), this);
+                if (enemy instanceof Boss) {
+                    // Flip horizontally so the boss faces left, toward the player
+                    g.drawImage(enemy.getImage(), enemy.getX() + Boss.WIDTH, enemy.getY(),
+                            -Boss.WIDTH, Boss.HEIGHT, this);
+                } else {
+                    g.drawImage(enemy.getImage(), enemy.getX(), enemy.getY(), this);
+                }
             }
 
             if (enemy.isDying()) {
