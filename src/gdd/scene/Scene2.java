@@ -59,6 +59,7 @@ public class Scene2 extends JPanel {
     private int juggernautKills = 0;
     private long score = 0;
     private boolean inGame = true;
+    private boolean isVictory = false;
     private String powerUpMessage = "";
     private int powerUpMessageTimer = 0;
     private String message = "Game Over";
@@ -198,6 +199,7 @@ public class Scene2 extends JPanel {
         juggernautKills = 0;
         score = 0;
         inGame = true;
+        isVictory = false;
         message = "Game Over";
         bossMusicStarted = false;
         
@@ -563,7 +565,11 @@ public class Scene2 extends JPanel {
                 timer.stop();
             }
 
-            gameOver(g);
+            if (isVictory) {
+                drawVictory(g);
+            } else {
+                gameOver(g);
+            }
         }
 
         Toolkit.getDefaultToolkit().sync();
@@ -595,6 +601,48 @@ public class Scene2 extends JPanel {
         Image gameOverImg = ii.getImage();
         
         g.drawImage(gameOverImg, 0, 0, BOARD_WIDTH, BOARD_HEIGHT, this);
+    }
+
+    private void drawVictory(Graphics g) {
+        g.setColor(Color.black);
+        g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+
+        // Header Title
+        var titleFont = new Font("Helvetica", Font.BOLD, 28);
+        g.setFont(titleFont);
+        g.setColor(Color.GREEN);
+        var fmTitle = g.getFontMetrics(titleFont);
+        String title = "VICTORY! ALL STAGES CLEARED!";
+        g.drawString(title, (BOARD_WIDTH - fmTitle.stringWidth(title)) / 2, 100);
+
+        // Stats Box / Summary
+        var labelFont = new Font("Helvetica", Font.PLAIN, 18);
+        g.setFont(labelFont);
+        g.setColor(Color.WHITE);
+
+        int lineX = 220;
+        int lineY = 170;
+        int lineGap = 30;
+
+        g.drawString("Final Score: " + score, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Time Taken: " + formatTime(frame), lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Scout Kills: " + scoutKills, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Wraith Kills: " + wraithKills, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Juggernaut Kills: " + juggernautKills, lineX, lineY);
+        lineY += lineGap;
+        g.drawString("Boss Defeated: " + BOSS_NAME, lineX, lineY);
+
+        // Restart Prompt
+        var smallFont = new Font("Helvetica", Font.BOLD, 14);
+        g.setFont(smallFont);
+        g.setColor(Color.YELLOW);
+        String prompt = "Press ENTER to Play Again";
+        var fmPrompt = g.getFontMetrics(smallFont);
+        g.drawString(prompt, (BOARD_WIDTH - fmPrompt.stringWidth(prompt)) / 2, 400);
     }
 
     private void update() {
@@ -660,6 +708,7 @@ public class Scene2 extends JPanel {
                             if (enemy instanceof Boss) {
                                 score += 5000;
                                 inGame = false;
+                                isVictory = true;
                                 timer.stop();
                                 message = "VICTORY! ALL STAGES CLEARED!";
                                 
@@ -714,7 +763,6 @@ public class Scene2 extends JPanel {
             }
         }
 
-        // Boss-specific behavior: minion spawning + laser telegraph attack (phase 2 only)
         Boss boss = findBoss();
         if (boss != null && boss.isVisible()) {
 

@@ -1085,21 +1085,20 @@ public class Scene1 extends JPanel {
     }
  
     private class TAdapter extends KeyAdapter {
- 
+
         @Override
         public void keyReleased(KeyEvent e) {
-            // Crucial: stops the player ship from moving when key is released!
             player.keyReleased(e);
         }
- 
+
         @Override
         public void keyPressed(KeyEvent e) {
             int key = e.getKeyCode();
- 
-            // When Game Over: pressing SPACE restarts the game
+
+            // When Game Over or Stage Cleared (Dashboard):
             if (!inGame) {
                 if (showDashboard) {
-                    if (key == KeyEvent.VK_ENTER || key == KeyEvent.VK_SPACE) {
+                    if (key == KeyEvent.VK_ENTER) {
                         proceedToScene2();
                     }
                     return;
@@ -1110,27 +1109,27 @@ public class Scene1 extends JPanel {
                 }
                 return;
             }
- 
+
             player.keyPressed(e);
- 
+
             int x = player.getX();
             int y = player.getY();
- 
+
             if (key == KeyEvent.VK_SPACE) {
                 if (shots.size() < player.getMaxShots()) {
                     Shot shot = new Shot(x, y);
                     shots.add(shot);
                     shotsFired++;
- 
-                    // PUT IT RIGHT HERE:
+
+                    // Sound effect triggers on shot creation
                     AudioPlayer.playSoundEffect("src/audio/fire.wav");
                 }
             }
         }
     }
- 
+
     private class MAdapter extends MouseAdapter {
- 
+
         @Override
         public void mouseClicked(MouseEvent e) {
             if (showDashboard && continueButtonBounds != null
