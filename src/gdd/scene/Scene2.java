@@ -19,6 +19,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -32,6 +33,10 @@ import javax.swing.ImageIcon;
 import javax.swing.JPanel;
 import javax.swing.Timer;
 
+import gdd.powerup.MultiShot;
+import gdd.powerup.PowerUp;
+import gdd.powerup.SpeedUp;
+
 public class Scene2 extends JPanel {
 
     private static final String BOSS_NAME = "THE HARBINGER";
@@ -41,6 +46,8 @@ public class Scene2 extends JPanel {
     private Player player;
     private List<Shot> shots;
     private List<Bomb> bombs;
+    private List<Explosion> explosions = new ArrayList<>();
+    private List<PowerUp> powerUps = new ArrayList<>();
 
     private AudioPlayer audioPlayer;
     private boolean bossMusicStarted = false;
@@ -52,6 +59,8 @@ public class Scene2 extends JPanel {
     private int juggernautKills = 0;
     private long score = 0;
     private boolean inGame = true;
+    private String powerUpMessage = "";
+    private int powerUpMessageTimer = 0;
     private String message = "Game Over";
 
     private final Random randomizer = new Random();
@@ -139,6 +148,10 @@ public class Scene2 extends JPanel {
 
     private void loadSpawnDetails() {
         int frameCursor = 100;
+        spawnMap.put(300, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
+        spawnMap.put(800, new SpawnDetails("PowerUp-MultiShot", 720, 350));
+        spawnMap.put(1500, new SpawnDetails("PowerUp-SpeedUp", 720, 150));
+        spawnMap.put(2200, new SpawnDetails("PowerUp-MultiShot", 720, 400));
 
         // Wave 1: Scouts (Alien1)
         for (int i = 0; i < 8; i++) {
@@ -172,6 +185,8 @@ public class Scene2 extends JPanel {
         enemies = new ArrayList<>();
         shots = new ArrayList<>();
         bombs = new ArrayList<>();
+        explosions = new ArrayList<>();
+        powerUps = new ArrayList<>();
         player = new Player();
     }
 
@@ -434,6 +449,13 @@ public class Scene2 extends JPanel {
         doDrawing(g);
     }
 
+    // 1. Add the helper method here (above doDrawing)
+    private void drawExplosions(Graphics g) {
+        for (Explosion exp : explosions) {
+            g.drawImage(exp.getImage(), exp.getX(), exp.getY(), this);
+        }
+    }
+
     private void doDrawing(Graphics g) {
         g.setColor(Color.black);
         g.fillRect(0, 0, d.width, d.height);
@@ -445,6 +467,8 @@ public class Scene2 extends JPanel {
             g.drawString("STAGE 2 - FINAL STAGE", 10, 20);
 
             drawEnemies(g);
+            drawPowerUps(g);
+            drawExplosions(g); 
             drawBombs(g);
             drawBossLaser(g);
             drawPlayer(g);
@@ -453,6 +477,8 @@ public class Scene2 extends JPanel {
             drawBossHealthBar(g);
             drawStatusHUD(g);
             drawBossWarning(g);
+            drawPowerUpMessage(g);
+
         } else {
             if (timer.isRunning()) {
                 timer.stop();
@@ -464,29 +490,32 @@ public class Scene2 extends JPanel {
         Toolkit.getDefaultToolkit().sync();
     }
 
+    private void drawPowerUps(Graphics g) {
+        for (PowerUp pu : powerUps) {
+            if (pu.isVisible()) {
+                g.drawImage(pu.getImage(), pu.getX(), pu.getY(), this);
+            }
+        }
+    }
+
+    private void drawPowerUpMessage(Graphics g) {
+        if (powerUpMessageTimer > 0 && !powerUpMessage.isEmpty()) {
+            g.setFont(new Font("Helvetica", Font.BOLD, 18));
+            g.setColor(new Color(255, 215, 0)); // Gold color
+            
+            // Draw centered at the top area of the screen
+            g.drawString(powerUpMessage, 200, 80); 
+        }
+    }
+
     private void gameOver(Graphics g) {
         g.setColor(Color.black);
         g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 
-        g.setColor(new Color(0, 32, 48));
-        g.fillRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 70);
-        g.setColor(Color.white);
-        g.drawRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 70);
-
-        var small = new Font("Helvetica", Font.BOLD, 14);
-        var fontMetrics = this.getFontMetrics(small);
-
-        g.setColor(Color.white);
-        g.setFont(small);
-        g.drawString(message, (BOARD_WIDTH - fontMetrics.stringWidth(message)) / 2,
-                BOARD_WIDTH / 2 - 10);
-
-        var tiny = new Font("Helvetica", Font.PLAIN, 12);
-        var tinyMetrics = this.getFontMetrics(tiny);
-        String retryText = "Press SPACE to retry";
-        g.setFont(tiny);
-        g.drawString(retryText, (BOARD_WIDTH - tinyMetrics.stringWidth(retryText)) / 2,
-                BOARD_WIDTH / 2 + 20);
+        ImageIcon ii = new ImageIcon(IMG_GAME_OVER);
+        Image gameOverImg = ii.getImage();
+        
+        g.drawImage(gameOverImg, 0, 0, BOARD_WIDTH, BOARD_HEIGHT, this);
     }
 
     private void update() {
@@ -505,8 +534,14 @@ public class Scene2 extends JPanel {
                 case "Boss":
                     enemies.add(new Boss(sd.x, sd.y, BOSS_HIT_POINTS));
                     break;
+                case "PowerUp-SpeedUp":
+                    powerUps.add(new SpeedUp(sd.x, sd.y));
+                    break;
+                case "PowerUp-MultiShot":
+                    powerUps.add(new MultiShot(sd.x, sd.y));
+                    break;
                 default:
-                    System.out.println("Unknown enemy type: " + sd.type);
+                    System.out.println("Unknown spawn type: " + sd.type);
                     break;
             }
         }
@@ -541,12 +576,22 @@ public class Scene2 extends JPanel {
                         if (enemyDied) {
                             deaths++;
                             AudioPlayer.playSoundEffect(Global.AUD_EXPLODE);
+                            explosions.add(new Explosion(enemy.getX(), enemy.getY()));
 
                             if (enemy instanceof Boss) {
                                 score += 5000;
                                 inGame = false;
                                 timer.stop();
                                 message = "VICTORY! ALL STAGES CLEARED!";
+                                
+                                // Stop background audio on victory as well
+                                if (audioPlayer != null) {
+                                    try {
+                                        audioPlayer.stop();
+                                    } catch (Exception e) {
+                                        System.err.println("Error stopping background audio: " + e.getMessage());
+                                    }
+                                }
                                 AudioPlayer.playSoundEffect(Global.AUD_LEVEL_UP);
                             } else if (enemy instanceof Alien3) {
                                 juggernautKills++;
@@ -597,7 +642,7 @@ public class Scene2 extends JPanel {
             if (!bossMusicStarted) {
                 try {
                     if (audioPlayer != null) {
-                        audioPlayer.stop(); // Stop stage2.wav[cite: 19]
+                        audioPlayer.stop(); // Stop stage2.wav
                     }
                     audioPlayer = new AudioPlayer(Global.AUD_BOSS); // Start boss-battle.wav
                     audioPlayer.play();
@@ -683,8 +728,60 @@ public class Scene2 extends JPanel {
             inGame = false;
             timer.stop();
             message = "Game Over";
+
+            // Stop background music upon dying
+            if (audioPlayer != null) {
+                try {
+                    audioPlayer.stop();
+                } catch (Exception e) {
+                    System.err.println("Error stopping background music: " + e.getMessage());
+                }
+            }
+
             AudioPlayer.playSoundEffect(Global.AUD_GAMEOVER);
         }
+
+        List<PowerUp> powerUpsToRemove = new ArrayList<>();
+        for (PowerUp pu : powerUps) {
+            if (pu.isVisible()) {
+                pu.act();
+
+                if (pu.collidesWith(player)) {
+                    pu.upgrade(player);
+                    AudioPlayer.playSoundEffect(Global.AUD_LEVEL_UP);
+                    
+                    if (pu instanceof SpeedUp) {
+                        powerUpMessage = "Speed Increased!";
+                    } else if (pu instanceof MultiShot) {
+                        powerUpMessage = "Multi-Shot Activated!";
+                    }
+                    powerUpMessageTimer = 60; 
+
+                    powerUpsToRemove.add(pu);
+                } else if (pu.getX() < -32) {
+                    pu.die();
+                    powerUpsToRemove.add(pu);
+                }
+            } else {
+                powerUpsToRemove.add(pu);
+            }
+        }
+        powerUps.removeAll(powerUpsToRemove);
+
+        // Tick down the message display timer
+        if (powerUpMessageTimer > 0) {
+            powerUpMessageTimer--;
+        }
+
+
+        List<Explosion> expiredExplosions = new ArrayList<>();
+        for (Explosion exp : explosions) {
+            exp.update();
+            if (exp.isExpired()) {
+                expiredExplosions.add(exp);
+            }
+        }
+        explosions.removeAll(expiredExplosions);
 
         frame++;
     }
@@ -701,6 +798,34 @@ public class Scene2 extends JPanel {
         }
     }
 
+    // --- ADD THE EXPLOSION CLASS HERE ---
+    private class Explosion {
+        private int x, y;
+        private int timer = 12; // ~0.2 seconds visual burst
+        private Image image;
+
+        public Explosion(int x, int y) {
+            this.x = x;
+            this.y = y;
+            
+            ImageIcon ii = new ImageIcon(IMG_EXPLOSION);
+            // Scale the explosion to match enemy sprite dimensions
+            this.image = ii.getImage().getScaledInstance(32, 32, Image.SCALE_FAST);
+        }
+
+        public int getX() { return x; }
+        public int getY() { return y; }
+        public Image getImage() { return image; }
+
+        public void update() {
+            timer--;
+        }
+
+        public boolean isExpired() {
+            return timer <= 0;
+        }
+    }
+
     private class TAdapter extends KeyAdapter {
         @Override
         public void keyReleased(KeyEvent e) {
@@ -714,7 +839,7 @@ public class Scene2 extends JPanel {
             int key = e.getKeyCode();
 
             if (!inGame) {
-                if (key == KeyEvent.VK_SPACE) {
+                if (key == KeyEvent.VK_ENTER) {
                     restartStage();
                 }
                 return;

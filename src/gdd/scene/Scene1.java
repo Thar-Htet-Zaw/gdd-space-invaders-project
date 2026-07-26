@@ -23,6 +23,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.Graphics;
 import java.awt.Toolkit;
 import java.awt.Rectangle;
@@ -703,26 +704,13 @@ public class Scene1 extends JPanel {
     }
  
     private void gameOver(Graphics g) {
- 
         g.setColor(Color.black);
         g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
- 
-        g.setColor(new Color(0, 32, 48));
-        g.fillRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 70);
-        g.setColor(Color.white);
-        g.drawRect(50, BOARD_WIDTH / 2 - 30, BOARD_WIDTH - 100, 70);
- 
-        var small = new Font("Helvetica", Font.BOLD, 14);
-        var fontMetrics = this.getFontMetrics(small);
- 
-        g.setColor(Color.white);
-        g.setFont(small);
-        g.drawString(message, (BOARD_WIDTH - fontMetrics.stringWidth(message)) / 2,
-                BOARD_WIDTH / 2 - 10);
- 
-        String restartMsg = "Press SPACE to Restart";
-        g.drawString(restartMsg, (BOARD_WIDTH - fontMetrics.stringWidth(restartMsg)) / 2,
-                BOARD_WIDTH / 2 + 20);
+
+        ImageIcon ii = new ImageIcon(IMG_GAME_OVER);
+        Image gameOverImg = ii.getImage();
+        
+        g.drawImage(gameOverImg, 0, 0, BOARD_WIDTH, BOARD_HEIGHT, this);
     }
  
     private void update() {
@@ -1040,14 +1028,13 @@ public class Scene1 extends JPanel {
                     }
                     return;
                 }
-                if (key == KeyEvent.VK_SPACE) {
+                if (key == KeyEvent.VK_SPACE || key == KeyEvent.VK_ENTER) {
                     stop();
                     start();
                 }
                 return;
             }
  
-            // Normal gameplay input
             player.keyPressed(e);
  
             int x = player.getX();

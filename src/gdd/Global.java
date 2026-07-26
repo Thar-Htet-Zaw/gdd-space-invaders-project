@@ -25,15 +25,15 @@ public class Global {
     public static final int NUMBER_OF_ALIENS_TO_DESTROY = 24;
     public static final int CHANCE = 5;
     public static final int DELAY = 17;
-    public static final int PLAYER_WIDTH = 30; // Doubled from 15
-    public static final int PLAYER_HEIGHT = 20; // Doubled from 10
+    public static final int PLAYER_WIDTH = 64; // Doubled from 15
+    public static final int PLAYER_HEIGHT = 48; // Doubled from 10
 
     // Images
     public static final String IMG_ENEMY = "src/images/alien.png";
     public static final String IMG_ENEMY_SCOUT = "src/images/alien-scout.png";
     public static final String IMG_ENEMY_WRAITH = "src/images/alien-wraith.png";
     public static final String IMG_ENEMY_JUGGERNAUT = "src/images/alien-juggernaut.png";
-    public static final String IMG_PLAYER = "src/images/player.png";
+    public static final String IMG_PLAYER = "src/images/player_spaceship.png";
     public static final String IMG_SHOT = "src/images/shot.png";
     public static final String IMG_EXPLOSION = "src/images/explosion.png";
     public static final String IMG_TITLE = "src/images/title.png";
@@ -41,6 +41,7 @@ public class Global {
     public static final String IMG_POWERUP_MULTISHOT = "src/images/powerup-m.png";
     public static final String IMG_BOMB = "src/images/bomb.png";
     public static final String IMG_BOSS = "src/images/boss.png";
+    public static final String IMG_GAME_OVER = "src/images/gameover.png";
 
     // Audio Files
     public static final String AUD_TITLE = "src/audio/title.wav";
