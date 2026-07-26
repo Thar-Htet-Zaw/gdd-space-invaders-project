@@ -381,9 +381,14 @@ public class Scene1 extends JPanel {
                 int drawX = enemy.getX() - (w - baseW) / 2;
                 int drawY = enemy.getY() - (h - baseH) / 2;
 
-                g.drawImage(img, drawX, drawY, w, h, this);
+                // Source art faces downward by default; rotate 90° (same direction as
+                // the player/shot rotation) so these enemies face left, toward the player.
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.rotate(Math.toRadians(90), drawX + w / 2.0, drawY + h / 2.0);
+                g2d.drawImage(img, drawX, drawY, w, h, this);
+                g2d.dispose();
             }
-
+            
             if (enemy.isDying()) {
 
                 enemy.die();
@@ -512,17 +517,18 @@ public class Scene1 extends JPanel {
             if (explosion.isVisible()) {
                 explosion.tickAnimation();
 
-                // Grow-and-fade burst -- the existing explosion image is drawn
-                // larger and more transparent each frame of its short lifetime.
-                // Pure drawing, no new art (no sprite sheet needed).
-                int lifeFrames = 10; // matches Sprite's default visibleFrames countdown
+                // Grow-and-fade burst. Uses Explosion's own known base size/lifetime
+                // constants rather than querying the scaled image's width/height --
+                // Image.getScaledInstance() fills in pixels asynchronously, so its
+                // dimensions aren't reliably queryable immediately after creation.
+                int lifeFrames = Explosion.getLifetimeFrames();
                 float progress = Math.min(1f, explosion.getAnimFrame() / (float) lifeFrames);
                 double scale = 0.6 + 0.9 * progress;
                 float alpha = Math.max(0f, 1f - progress);
 
                 Image img = explosion.getImage();
-                int baseW = img.getWidth(this);
-                int baseH = img.getHeight(this);
+                int baseW = Explosion.getBaseSize();
+                int baseH = Explosion.getBaseSize();
                 int w = (int) (baseW * scale);
                 int h = (int) (baseH * scale);
                 int drawX = explosion.getX() - (w - baseW) / 2;
@@ -664,12 +670,12 @@ public class Scene1 extends JPanel {
         if (inGame) {
  
             drawMap(g);  // Draw background stars first
-            drawExplosions(g);
             drawPowreUps(g);
             drawAliens(g);
             drawBombs(g);
             drawPlayer(g);
             drawShot(g);
+            drawExplosions(g); // drawn last so bursts always render on top, never hidden behind a sprite
             drawKillCounts(g);
             drawHealthBar(g);
             drawPickupMessage(g);
@@ -1112,25 +1118,25 @@ public class Scene1 extends JPanel {
 
         // 1. Check if the player is on the victory screen and pressed ENTER
         if (!inGame) {
-    if (key == KeyEvent.VK_ENTER) {
-            if (isVictory || showDashboard) {
-                Scene1.this.stop(); 
-                game.loadScene2();
-            } else {
-                Scene1.this.stop(); 
-                game.loadScene1();
-            }
+            if (key == KeyEvent.VK_ENTER) {
+                    if (isVictory || showDashboard) {
+                        Scene1.this.stop(); 
+                        game.loadScene2();
+                    } else {
+                        Scene1.this.stop(); 
+                        game.loadScene1();
+                    }
+                }
+                return;
         }
-        return;
-    }
 
-            player.keyPressed(e);
+        player.keyPressed(e);
 
-            int x = player.getX();
-            int y = player.getY();
+        int x = player.getX();
+        int y = player.getY();
 
-            if (key == KeyEvent.VK_SPACE) {
-                if (shots.size() < player.getMaxShots()) {
+        if (key == KeyEvent.VK_SPACE) {
+            if (shots.size() < player.getMaxShots()) {
                     Shot shot = new Shot(x, y);
                     shots.add(shot);
                     shotsFired++;

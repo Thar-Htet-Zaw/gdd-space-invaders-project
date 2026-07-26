@@ -64,7 +64,7 @@ public class Boss extends Enemy {
         super(x, y);
         setHitPoints(startingHitPoints);
         this.maxHitPoints = startingHitPoints;
-        this.engageX = BOARD_WIDTH - WIDTH - 3; // small right-edge margin
+        this.engageX = BOARD_WIDTH - (int) (WIDTH * 0.7); // ~30% of the boss's width extends past the right edge
         this.baseY = y + 5; // small buffer below the boss HP bar, since there's little vertical room to spare
 
         // Override the default enemy-sized sprite with a larger, boss-appropriate size.
@@ -242,10 +242,14 @@ public class Boss extends Enemy {
                 break;
 
             case TENTACLE_SLAM: {
-                // Close-range zone reaching out from the boss — punishes staying near it
-                int slamWidth = 220;
-                int slamX = Math.max(0, engageX - (slamWidth - WIDTH));
-                activeZones.add(new int[]{slamX, 0, slamWidth, BOARD_HEIGHT});
+                // Targets the player's exact position at the moment the attack starts
+                // charging (like a ground-slam) -- guarantees it's always a real threat,
+                // rather than a fixed zone the player could just avoid by staying away
+                // from it. Clamped so the zone never extends past the screen edges.
+                int slamSize = 140;
+                int slamX = Math.max(0, Math.min(BOARD_WIDTH - slamSize, playerX - slamSize / 2));
+                int slamY = Math.max(0, Math.min(BOARD_HEIGHT - slamSize, playerY - slamSize / 2));
+                activeZones.add(new int[]{slamX, slamY, slamSize, slamSize});
                 break;
             }
 

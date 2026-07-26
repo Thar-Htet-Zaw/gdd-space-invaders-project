@@ -323,7 +323,13 @@ public class Scene2 extends JPanel {
                     int h = (int) (baseH * pulse);
                     int drawX = enemy.getX() - (w - baseW) / 2;
                     int drawY = enemy.getY() - (h - baseH) / 2;
-                    g.drawImage(img, drawX, drawY, w, h, this);
+
+                    // Source art faces downward by default; rotate 90° (same direction as
+                    // the player/shot rotation) so these enemies face left, toward the player.
+                    Graphics2D g2d = (Graphics2D) g.create();
+                    g2d.rotate(Math.toRadians(90), drawX + w / 2.0, drawY + h / 2.0);
+                    g2d.drawImage(img, drawX, drawY, w, h, this);
+                    g2d.dispose();
                 }
             }
 
@@ -609,18 +615,19 @@ public class Scene2 extends JPanel {
             if (explosion.isVisible()) {
                 explosion.tickAnimation();
 
-                int lifeFrames = 10;
+                // Uses Explosion's own known base size/lifetime constants rather than
+                // querying the scaled image's width/height -- Image.getScaledInstance()
+                // fills in pixels asynchronously, so its dimensions aren't reliably
+                // queryable immediately after creation.
+                int lifeFrames = Explosion.getLifetimeFrames();
                 float progress = Math.min(1f, explosion.getAnimFrame() / (float) lifeFrames);
                 double scale = 0.6 + 0.9 * progress;
                 float alpha = Math.max(0f, 1f - progress);
 
                 Image img = explosion.getImage();
-                
-                // --- FIX APPLIED HERE ---
-                int baseW = img.getWidth(this);
-                int baseH = img.getHeight(this);
-                // ------------------------
-                
+                int baseW = Explosion.getBaseSize();
+                int baseH = Explosion.getBaseSize();
+
                 int w = (int) (baseW * scale);
                 int h = (int) (baseH * scale);
                 int drawX = explosion.getX() - (w - baseW) / 2;
@@ -652,11 +659,11 @@ public class Scene2 extends JPanel {
 
             drawEnemies(g);
             drawPowerUps(g);
-            drawExplosions(g); 
             drawBombs(g);
             drawBossAttack(g);
             drawPlayer(g);
             drawShots(g);
+            drawExplosions(g); // drawn last so bursts always render on top, never hidden behind a sprite
             drawHealthBar(g);
             drawBossHealthBar(g);
             drawStatusHUD(g);
