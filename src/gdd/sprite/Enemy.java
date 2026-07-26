@@ -90,14 +90,19 @@ public class Enemy extends Sprite {
 
         private static final int SPEED = 4;
 
+        // Fixed on-screen size, regardless of source image resolution -- same fix
+        // applied to SpeedUp/MultiShot in Entry 10, applied here pre-emptively so
+        // swapping in a new (likely high-res, AI-generated) bomb image is safe.
+        private static final int BOMB_SIZE = 32;
+
         public Bomb(int x, int y) {
             this.x = x;
             this.y = y;
 
             var ii = new ImageIcon(IMG_BOMB);
             var scaledImage = ii.getImage().getScaledInstance(
-                    ii.getIconWidth() * SCALE_FACTOR,
-                    ii.getIconHeight() * SCALE_FACTOR,
+                    BOMB_SIZE,
+                    BOMB_SIZE,
                     java.awt.Image.SCALE_SMOOTH);
             setImage(scaledImage);
         }

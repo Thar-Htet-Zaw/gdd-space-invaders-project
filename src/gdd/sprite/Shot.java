@@ -8,6 +8,18 @@ public class Shot extends Sprite {
     private static final int H_SPACE = 20;
     private static final int V_SPACE = 1;
 
+    // Fixed size, regardless of source image resolution -- same fix applied to
+    // SpeedUp/MultiShot in Entry 10, applied here pre-emptively so swapping in a
+    // new (likely high-res, AI-generated) shot image is safe.
+    //
+    // IMPORTANT: these are PRE-rotation dimensions. drawShot()/drawShots() rotate
+    // this image 90 degrees at draw time ("rotate so the vertical line becomes
+    // horizontal"), so the source art must be authored as a TALL, NARROW vertical
+    // bolt -- narrow width, tall height -- for it to appear as a horizontal shot
+    // on screen after rotation.
+    private static final int SHOT_WIDTH = 10;
+    private static final int SHOT_HEIGHT = 28;
+
     public Shot() {
     }
 
@@ -20,10 +32,10 @@ public class Shot extends Sprite {
 
         var ii = new ImageIcon(IMG_SHOT);
 
-        // Scale the image to use the global scaling factor
+        // Scale to a fixed on-screen size, not the source image's native resolution
         var scaledImage = ii.getImage().getScaledInstance(
-                ii.getIconWidth() * SCALE_FACTOR,
-                ii.getIconHeight() * SCALE_FACTOR, 
+                SHOT_WIDTH,
+                SHOT_HEIGHT,
                 java.awt.Image.SCALE_SMOOTH);
         setImage(scaledImage);
 

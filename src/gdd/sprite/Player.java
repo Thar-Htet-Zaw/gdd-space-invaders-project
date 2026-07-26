@@ -21,12 +21,9 @@ public class Player extends Sprite {
     private void initPlayer() {
         ImageIcon ii = new ImageIcon(IMG_PLAYER);
 
-        int baseWidth = ii.getIconWidth() * SCALE_FACTOR;
-        int baseHeight = ii.getIconHeight() * SCALE_FACTOR;
-
         Image scaledImage = ii.getImage().getScaledInstance(
-                baseWidth > 0 ? baseWidth : 32,
-                baseHeight > 0 ? baseHeight : 32,
+                PLAYER_WIDTH,
+                PLAYER_HEIGHT,
                 Image.SCALE_SMOOTH);
 
         setImage(scaledImage);
