@@ -69,15 +69,25 @@ public class Player extends Sprite {
 
     @Override
     public void act() {
-        x += dx; // Original horizontal movement
-        y += dy; // Added vertical movement
+        x += dx;
+        y += dy;
 
-        // Simple boundary checks matching original style
-        if (y <= 2) {
-            y = 2;
+        // --- LEFT & RIGHT BORDER BOUNDS ---
+        if (x < 0) {
+            x = 0; // Stop player from leaving left edge
         }
-        if (y >= BOARD_HEIGHT - 60) {
-            y = BOARD_HEIGHT - 60;
+        
+        if (x > BOARD_WIDTH - PLAYER_WIDTH) {
+            x = BOARD_WIDTH - PLAYER_WIDTH; // Stop player from leaving right edge
+        }
+
+        // --- UP & DOWN BORDER BOUNDS ---
+        if (y < 0) {
+            y = 0;
+        }
+
+        if (y > BOARD_HEIGHT - PLAYER_HEIGHT - 40) {
+            y = BOARD_HEIGHT - PLAYER_HEIGHT - 40;
         }
     }
 
