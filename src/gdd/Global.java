@@ -46,11 +46,13 @@ public class Global {
 
     // Audio Files
     public static final String AUD_TITLE = "src/audio/title.wav";
-    public static final String AUD_SCENE1 = "src/audio/scene1.wav";
+    public static final String AUD_SCENE1 = "src/audio/scene1.wav    ";
     public static final String AUD_FIRE = "src/audio/fire.wav";
     public static final String AUD_EXPLODE = "src/audio/explode.wav";
     public static final String AUD_GAMEOVER = "src/audio/gameover-sound.wav";
     public static final String AUD_LEVEL_UP = "src/audio/level-up.wav";
     public static final String AUD_SCENE2 = "src/audio/stage2.wav";
-    public static final String AUD_BOSS = "src/audio/boss-battle.wav";
+    public static final String AUD_BOSS = "src/audio/Final_Boss_Theme.wav";
+    public static final String AUD_STAGE1_VICTORY = "src/audio/Stage1_Victory.wav"; 
+    public static final String AUD_VICTORY = "src/audio/Victory.wav";
 }

@@ -59,6 +59,10 @@ public class Player extends Sprite {
     public int getHealth() {
         return health;
     }
+    
+    public void setHealth(int health) {
+        this.health = health;
+    }
 
     public void hit() {
         health--;

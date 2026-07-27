@@ -8,6 +8,7 @@ import static gdd.Global.*;
 import gdd.SpawnDetails;
 import gdd.powerup.PowerUp;
 import gdd.powerup.SpeedUp;
+import gdd.powerup.HealUp;
 import gdd.powerup.MultiShot;
 import gdd.sprite.Alien1;
 import gdd.sprite.Alien2;
@@ -18,15 +19,19 @@ import gdd.sprite.Explosion;
 import gdd.sprite.Player;
 import gdd.sprite.Shot;
 import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.Graphics;
 import java.awt.Image;
 import java.awt.Toolkit;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
@@ -172,6 +177,7 @@ public class Scene1 extends JPanel {
         // a clear window to grab it without an enemy arriving at the same time.
         spawnMap.put(30, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
         spawnMap.put(1600, new SpawnDetails("PowerUp-MultiShot", 720, 300));
+        spawnMap.put(800, new SpawnDetails("PowerUp-HealUp", 720, 250));
  
         // --- Formation-based enemy spawning ---
         // Instead of lone enemies trickling in, enemies now spawn together in tight,
@@ -709,83 +715,143 @@ public class Scene1 extends JPanel {
     }
  
     private void drawDashboard(Graphics g) {
- 
-        g.setColor(Color.black);
-        g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
- 
-        int panelX = 80;
-        int panelY = 120;
-        int panelWidth = BOARD_WIDTH - 160;
-        int panelHeight = 440;
- 
-        g.setColor(new Color(0, 32, 48));
-        g.fillRect(panelX, panelY, panelWidth, panelHeight);
-        g.setColor(Color.white);
-        g.drawRect(panelX, panelY, panelWidth, panelHeight);
- 
-        var titleFont = new Font("Helvetica", Font.BOLD, 22);
-        var labelFont = new Font("Helvetica", Font.PLAIN, 16);
-        var fmTitle = this.getFontMetrics(titleFont);
- 
-        String title = "STAGE 1 COMPLETE!";
-        g.setColor(Color.YELLOW);
-        g.setFont(titleFont);
-        g.drawString(title, panelX + (panelWidth - fmTitle.stringWidth(title)) / 2, panelY + 40);
- 
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        // 1. Semi-transparent dark overlay over frozen gameplay
+        g2d.setColor(new Color(5, 10, 20, 210));
+        g2d.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+
+        // Panel Position & Dimensions
+        int panelWidth = 520;
+        int panelHeight = 480;
+        int panelX = (BOARD_WIDTH - panelWidth) / 2;
+        int panelY = (BOARD_HEIGHT - panelHeight) / 2;
+
+        // 2. Glassmorphism Panel Base
+        g2d.setColor(new Color(12, 24, 40, 235));
+        g2d.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
+
+        // Inner subtle gradient shine
+        GradientPaint glassShine = new GradientPaint(
+            panelX, panelY, new Color(0, 180, 255, 30),
+            panelX, panelY + panelHeight, new Color(0, 0, 0, 0)
+        );
+        g2d.setPaint(glassShine);
+        g2d.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
+
+        // Neon Outer Border & Corner Accents
+        g2d.setColor(new Color(0, 190, 255, 180));
+        g2d.setStroke(new BasicStroke(2f));
+        g2d.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
+
+        // Corner decorative notches
+        int notchSize = 12;
+        g2d.setColor(new Color(255, 215, 0, 220));
+        g2d.drawLine(panelX + 20, panelY + 12, panelX + 20 + notchSize, panelY + 12);
+        g2d.drawLine(panelX + 12, panelY + 20, panelX + 12, panelY + 20 + notchSize);
+        g2d.drawLine(panelX + panelWidth - 20 - notchSize, panelY + 12, panelX + panelWidth - 20, panelY + 12);
+        g2d.drawLine(panelX + panelWidth - 12, panelY + 20, panelX + panelWidth - 12, panelY + 20 + notchSize);
+
+        // 3. Header Banner
+        Font titleFont = new Font("Helvetica", Font.BOLD, 24);
+        g2d.setFont(titleFont);
+        FontMetrics fmTitle = g2d.getFontMetrics();
+        String title = "STAGE 1 COMPLETE";
+        
+        // Header Glow
+        g2d.setColor(new Color(255, 215, 0, 80));
+        g2d.drawString(title, panelX + (panelWidth - fmTitle.stringWidth(title)) / 2 + 1, panelY + 45 + 1);
+        g2d.setColor(new Color(255, 215, 0));
+        g2d.drawString(title, panelX + (panelWidth - fmTitle.stringWidth(title)) / 2, panelY + 45);
+
+        // Divider Line
+        g2d.setColor(new Color(0, 190, 255, 100));
+        g2d.drawLine(panelX + 30, panelY + 62, panelX + panelWidth - 30, panelY + 62);
+
+        // 4. Combat Statistics Grid Layout
+        Font labelFont = new Font("Helvetica", Font.PLAIN, 14);
+        Font valFont = new Font("Helvetica", Font.BOLD, 14);
+        
+        int startY = panelY + 92;
+        int rowGap = 24;
+        int col1X = panelX + 45;
+        int col2X = panelX + panelWidth / 2 + 15;
+
         int totalKills = scoutKills + wraithKills + juggernautKills;
         int accuracy = shotsFired > 0 ? Math.min(100, (int) (100.0 * totalKills / shotsFired)) : 0;
- 
-        g.setColor(Color.white);
-        g.setFont(labelFont);
-        int lineX = panelX + 30;
-        int lineY = panelY + 85;
-        int lineGap = 28;
- 
-        g.drawString("Score: " + score, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Time Survived: " + formatTime(frame), lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Total Enemies Destroyed: " + totalKills, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("  Scout Kills: " + scoutKills, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("  Wraith Kills: " + wraithKills, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("  Juggernaut Kills: " + juggernautKills, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Shots Fired: " + shotsFired + "   Accuracy: " + accuracy + "%", lineX, lineY);
-        lineY += lineGap;
-       g.drawString("Health Remaining: " + Math.max(0, player.getHealth()) + " / 5", lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Final Speed: " + player.getSpeed(), lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Max Simultaneous Shots: " + player.getMaxShots(), lineX, lineY);
 
-        // Continue button
-        int buttonWidth = 220;
-        int buttonHeight = 45;
+        // Left Column Stats
+        drawStatRow(g2d, "Score:", String.valueOf(score), col1X, startY, labelFont, valFont, new Color(255, 215, 0));
+        drawStatRow(g2d, "Time Survived:", formatTime(frame), col1X, startY + rowGap, labelFont, valFont, Color.WHITE);
+        drawStatRow(g2d, "Enemies Slain:", String.valueOf(totalKills), col1X, startY + rowGap * 2, labelFont, valFont, Color.CYAN);
+        drawStatRow(g2d, "  • Scout Kills:", String.valueOf(scoutKills), col1X, startY + rowGap * 3, labelFont, valFont, Color.LIGHT_GRAY);
+        drawStatRow(g2d, "  • Wraith Kills:", String.valueOf(wraithKills), col1X, startY + rowGap * 4, labelFont, valFont, Color.LIGHT_GRAY);
+        drawStatRow(g2d, "  • Juggernaut Kills:", String.valueOf(juggernautKills), col1X, startY + rowGap * 5, labelFont, valFont, Color.LIGHT_GRAY);
+
+        // Right Column Stats
+        drawStatRow(g2d, "Shots Fired:", String.valueOf(shotsFired), col2X, startY, labelFont, valFont, Color.WHITE);
+        drawStatRow(g2d, "Accuracy:", accuracy + "%", col2X, startY + rowGap, labelFont, valFont, accuracy >= 50 ? Color.GREEN : Color.ORANGE);
+        drawStatRow(g2d, "Health:", Math.max(0, player.getHealth()) + " / 5", col2X, startY + rowGap * 2, labelFont, valFont, Color.GREEN);
+        drawStatRow(g2d, "Final Speed:", String.valueOf(player.getSpeed()), col2X, startY + rowGap * 3, labelFont, valFont, Color.WHITE);
+        drawStatRow(g2d, "Max Shots:", String.valueOf(player.getMaxShots()), col2X, startY + rowGap * 4, labelFont, valFont, Color.WHITE);
+
+        // Lower Divider
+        g2d.setColor(new Color(0, 190, 255, 100));
+        g2d.drawLine(panelX + 30, panelY + panelHeight - 95, panelX + panelWidth - 30, panelY + panelHeight - 95);
+
+        // 5. Interactive Action Button
+        int buttonWidth = 240;
+        int buttonHeight = 44;
         int buttonX = panelX + (panelWidth - buttonWidth) / 2;
-        int buttonY = panelY + panelHeight - 70;
- 
+        int buttonY = panelY + panelHeight - 80;
+
         continueButtonBounds = new Rectangle(buttonX, buttonY, buttonWidth, buttonHeight);
- 
-        g.setColor(new Color(0, 90, 40));
-        g.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
-        g.setColor(Color.white);
-        g.drawRect(buttonX, buttonY, buttonWidth, buttonHeight);
- 
-        String buttonText = "CONTINUE TO STAGE 2";
-        var fmButton = this.getFontMetrics(labelFont);
-        g.drawString(buttonText,
-                buttonX + (buttonWidth - fmButton.stringWidth(buttonText)) / 2,
-                buttonY + buttonHeight / 2 + 5);
- 
-        String hint = "(click Continue, or press ENTER)";
-        var small = new Font("Helvetica", Font.PLAIN, 12);
-        g.setFont(small);
-        g.setColor(Color.LIGHT_GRAY);
-        var fmHint = this.getFontMetrics(small);
-        g.drawString(hint, panelX + (panelWidth - fmHint.stringWidth(hint)) / 2, buttonY + buttonHeight + 20);
+
+        // Gradient Action Button Base
+        GradientPaint btnGrad = new GradientPaint(
+            buttonX, buttonY, new Color(0, 180, 80),
+            buttonX, buttonY + buttonHeight, new Color(0, 90, 40)
+        );
+
+        g2d.setPaint(btnGrad);
+        g2d.fillRoundRect(buttonX, buttonY, buttonWidth, buttonHeight, 14, 14);
+
+        // Highlight Border
+        g2d.setColor(new Color(120, 255, 160));
+        g2d.setStroke(new BasicStroke(1.5f));
+        g2d.drawRoundRect(buttonX, buttonY, buttonWidth, buttonHeight, 14, 14);
+
+        // Button Text
+        Font btnFont = new Font("Helvetica", Font.BOLD, 15);
+        g2d.setFont(btnFont);
+        g2d.setColor(Color.WHITE);
+        FontMetrics fmBtn = g2d.getFontMetrics();
+        String btnText = "CONTINUE TO STAGE 2";
+        g2d.drawString(btnText, buttonX + (buttonWidth - fmBtn.stringWidth(btnText)) / 2, buttonY + 27);
+
+        // Subtext Prompt
+        Font hintFont = new Font("Helvetica", Font.ITALIC, 11);
+        g2d.setFont(hintFont);
+        g2d.setColor(new Color(180, 210, 230));
+        FontMetrics fmHint = g2d.getFontMetrics();
+        String hintText = "(Click button or press ENTER to advance)";
+        g2d.drawString(hintText, panelX + (panelWidth - fmHint.stringWidth(hintText)) / 2, buttonY + buttonHeight + 18);
+
+        g2d.dispose();
+    }
+
+    // Helper method to draw clean key-value stat pairs
+    private void drawStatRow(Graphics2D g2d, String label, String value, int x, int y, Font labelFont, Font valFont, Color valColor) {
+        g2d.setFont(labelFont);
+        g2d.setColor(new Color(200, 220, 240));
+        g2d.drawString(label, x, y);
+
+        g2d.setFont(valFont);
+        g2d.setColor(valColor);
+        int valueX = x + g2d.getFontMetrics(labelFont).stringWidth(label) + 8;
+        g2d.drawString(value, valueX, y);
     }
  
     private void proceedToScene2() {
@@ -833,6 +899,10 @@ public class Scene1 extends JPanel {
                     PowerUp multiShot = new MultiShot(sd.x, sd.y);
                     powerups.add(multiShot);
                     break;
+                case "PowerUp-HealUp": 
+                    PowerUp healUp = new HealUp(sd.x, sd.y);
+                    powerups.add(healUp);
+                    break;
                 default:
                     System.out.println("Unknown enemy type: " + sd.type);
                     break;
@@ -844,7 +914,7 @@ public class Scene1 extends JPanel {
             showDashboard = true;
             isVictory = true;
             timer.stop();
- 
+
             if (audioPlayer != null) {
                 try {
                     audioPlayer.stop();
@@ -852,6 +922,8 @@ public class Scene1 extends JPanel {
                     System.err.println("Error stopping audio: " + e.getMessage());
                 }
             }
+
+            AudioPlayer.playSoundEffect(Global.AUD_STAGE1_VICTORY);
         }
  
         // player
@@ -871,7 +943,10 @@ public class Scene1 extends JPanel {
                         showPickupMessage("Speed Increased!");
                     } else if (powerup instanceof MultiShot) {
                         showPickupMessage("Obtained Multi-Shot!");
+                    } else if (powerup instanceof HealUp) { 
+                        showPickupMessage("Health Restored!");
                     }
+
                 }
             }
         }
@@ -889,7 +964,44 @@ public class Scene1 extends JPanel {
         for (Enemy enemy : enemies) {
             if (enemy.isVisible()) {
                 enemy.act(direction);
- 
+
+                // --- Player vs Enemy Collision Check ---
+                if (player.isVisible() && !player.isDying()) {
+                    // Using your existing collidesWith method!
+                    if (player.collidesWith(enemy)) { 
+                        
+                        // 1. Damage player
+                        player.hit();
+                        AudioPlayer.playSoundEffect(Global.AUD_EXPLODE);
+
+                        // 2. Damage/destroy enemy
+                        boolean enemyDied = enemy.hit();
+                        if (enemyDied) {
+                            explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+                            deaths++;
+                            
+                            if (enemy instanceof Alien3) {
+                                juggernautKills++;
+                                score += 300;
+                            } else if (enemy instanceof Alien2) {
+                                wraithKills++;
+                                score += 150;
+                            } else if (enemy instanceof Alien1) {
+                                scoutKills++;
+                                score += 100;
+                            }
+                        }
+
+                        // 3. Set player explosion graphic if hp drops to 0
+                        if (player.isDying()) {
+                            var ii = new ImageIcon(IMG_EXPLOSION);
+                            var scaledDeathImg = ii.getImage().getScaledInstance(
+                                    PLAYER_WIDTH, PLAYER_HEIGHT, java.awt.Image.SCALE_SMOOTH);
+                            player.setImage(scaledDeathImg);
+                        }
+                    }
+                }
+
                 // Roll the odds for this enemy to drop a bomb this frame
                 Bomb newBomb = enemy.maybeDropBomb();
                 if (newBomb != null) {

@@ -20,6 +20,7 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GradientPaint;
@@ -43,6 +44,7 @@ import javax.swing.Timer;
 import gdd.powerup.MultiShot;
 import gdd.powerup.PowerUp;
 import gdd.powerup.SpeedUp;
+import gdd.powerup.HealUp;
 
 public class Scene2 extends JPanel {
 
@@ -182,7 +184,7 @@ public class Scene2 extends JPanel {
         FORMATION_V_SMALL, FORMATION_WALL_SMALL, FORMATION_V_LARGE, FORMATION_WALL_LARGE, FORMATION_DIAGONAL_LARGE
     };
 
-    private static final boolean SKIP_WAVES_FOR_TESTING = true; // TEMP: set true to jump straight to the boss
+    private static final boolean SKIP_WAVES_FOR_TESTING = false; // Turned off testing mode
 
     private void loadSpawnDetails() {
         if (SKIP_WAVES_FOR_TESTING) {
@@ -191,63 +193,68 @@ public class Scene2 extends JPanel {
             return;
         }
 
-        // Periodic Power-Up Spawns spread throughout the 5 minutes
-        spawnMap.put(300, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
-        spawnMap.put(1800, new SpawnDetails("PowerUp-MultiShot", 720, 350));
-        spawnMap.put(4500, new SpawnDetails("PowerUp-SpeedUp", 720, 150));
-        spawnMap.put(7200, new SpawnDetails("PowerUp-MultiShot", 720, 400));
-        spawnMap.put(10500, new SpawnDetails("PowerUp-SpeedUp", 720, 250));
-        spawnMap.put(14000, new SpawnDetails("PowerUp-MultiShot", 720, 300));
+        // --- PRE-BOSS HEALTH PACKS & POWER-UPS (0 to 1 Minute) ---
+        spawnMap.put(300,  new SpawnDetails("PowerUp-HealUp", 720, 200));   // 5 sec
+        spawnMap.put(900,  new SpawnDetails("PowerUp-HealUp", 720, 350));   // 15 sec
+        spawnMap.put(1800, new SpawnDetails("PowerUp-HealUp", 720, 150));   // 30 sec
+        spawnMap.put(2700, new SpawnDetails("PowerUp-HealUp", 720, 400));   // 45 sec
+        spawnMap.put(3300, new SpawnDetails("PowerUp-HealUp", 720, 250));   // 55 sec (Just before Boss)
 
-        int frameCursor = 150;
+        // Pre-boss utility power-ups
+        spawnMap.put(600,  new SpawnDetails("PowerUp-SpeedUp", 720, 150));
+        spawnMap.put(1200, new SpawnDetails("PowerUp-MultiShot", 720, 300));
+        spawnMap.put(2100, new SpawnDetails("PowerUp-SpeedUp", 720, 250));
+        spawnMap.put(3000, new SpawnDetails("PowerUp-MultiShot", 720, 350));
 
-        // --- PHASE 1: Initial Warmup Waves (0 - 1.5 minutes / ~5,400 frames) ---
-        for (int i = 0; i < 15; i++) {
-            String type = (i % 3 == 0) ? "Alien2" : "Alien1";
-            for (int k = 0; k < 4; k++) {
+        // --- ENEMY WAVES (Packed into 1 Minute) ---
+        int frameCursor = 120;
+
+        // Rapid Warmup Waves
+        for (int i = 0; i < 6; i++) {
+            String type = (i % 2 == 0) ? "Alien2" : "Alien1";
+            for (int k = 0; k < 3; k++) {
                 spawnMap.put(frameCursor, new SpawnDetails(type, 720, 80 + randomizer.nextInt(460)));
-                frameCursor += 40;
+                frameCursor += 30;
             }
-            frameCursor += 250; // breather between mini-waves
+            frameCursor += 150;
         }
 
-        // --- PHASE 2: Formation Assault (1.5 - 3.5 minutes / ~12,600 frames) ---
-        for (int wave = 0; wave < 30; wave++) {
+        // Formation Assault
+        for (int wave = 0; wave < 8; wave++) {
             int[][] formation = FORMATIONS[wave % FORMATIONS.length];
-            String enemyType = (wave % 4 == 0) ? "Alien3" : ((wave % 2 == 0) ? "Alien2" : "Alien1");
-            int baseY = 160 + randomizer.nextInt(300);
+            String enemyType = (wave % 3 == 0) ? "Alien3" : ((wave % 2 == 0) ? "Alien2" : "Alien1");
+            int baseY = 160 + randomizer.nextInt(250);
 
             for (int i = 0; i < formation.length; i++) {
                 int dx = formation[i][0];
                 int dy = formation[i][1];
                 spawnMap.put(frameCursor + i, new SpawnDetails(enemyType, 720 + dx, baseY + dy));
             }
-
-            // Lone harasser enemy during lull
-            if (randomizer.nextInt(100) < 60) {
-                spawnMap.put(frameCursor + formation.length + 80, 
-                        new SpawnDetails("Alien2", 720, 60 + randomizer.nextInt(500)));
-            }
-
-            frameCursor += formation.length + 220;
+            frameCursor += formation.length + 180;
         }
 
-        // --- PHASE 3: Heavy Escort & Final Onslaught (3.5 - 5.0+ minutes / ~18,000+ frames) ---
-        for (int wave = 0; wave < 25; wave++) {
-            // Mixed wave: Tanky Juggernaut surrounded by Scouts/Wraiths
+        // Heavy Minion Rush
+        while (frameCursor < 3420) {
             spawnMap.put(frameCursor, new SpawnDetails("Alien3", 720, 150 + randomizer.nextInt(300)));
-            spawnMap.put(frameCursor + 15, new SpawnDetails("Alien1", 720, 80));
-            spawnMap.put(frameCursor + 30, new SpawnDetails("Alien1", 720, 520));
-            spawnMap.put(frameCursor + 45, new SpawnDetails("Alien2", 720, 300));
-
-            frameCursor += 180;
+            spawnMap.put(frameCursor + 15, new SpawnDetails("Alien1", 720, 100));
+            spawnMap.put(frameCursor + 30, new SpawnDetails("Alien1", 720, 500));
+            frameCursor += 120;
         }
 
-        frameCursor += 300; // Dramatic silence pause right before boss arrival
+        // --- BOSS ARRIVAL AT EXACTLY 1 MINUTE (3600 FRAMES) ---
+        bossSpawnFrame = 3600; 
+        spawnMap.put(bossSpawnFrame, new SpawnDetails("Boss", 720, 100));
 
-        // Boss spawns after ~5+ minutes (frameCursor >= 18,000)
-        bossSpawnFrame = frameCursor;
-        spawnMap.put(frameCursor, new SpawnDetails("Boss", 720, 100));
+        // --- MID-BOSS FIGHT POWER-UPS & HEALTH PACKS ---
+        // Spawns health packs every ~15-20 seconds AFTER the boss arrives to keep the player alive
+        spawnMap.put(4500,  new SpawnDetails("PowerUp-HealUp", 720, 200));   // 1m 15s
+        spawnMap.put(5400,  new SpawnDetails("PowerUp-HealUp", 720, 400));   // 1m 30s
+        spawnMap.put(6300,  new SpawnDetails("PowerUp-MultiShot", 720, 300)); // 1m 45s (Weapon boost)
+        spawnMap.put(7200,  new SpawnDetails("PowerUp-HealUp", 720, 150));   // 2m 00s
+        spawnMap.put(8100,  new SpawnDetails("PowerUp-HealUp", 720, 350));   // 2m 15s
+        spawnMap.put(9000,  new SpawnDetails("PowerUp-SpeedUp", 720, 250));   // 2m 30s
+        spawnMap.put(9900,  new SpawnDetails("PowerUp-HealUp", 720, 200));   // 2m 45s
+        spawnMap.put(10800, new SpawnDetails("PowerUp-HealUp", 720, 400));   // 3m 00s
     }
 
     private void gameInit() {
@@ -337,8 +344,6 @@ public class Scene2 extends JPanel {
                     int drawX = enemy.getX() - (w - baseW) / 2;
                     int drawY = enemy.getY() - (h - baseH) / 2;
 
-                    // Source art faces downward by default; rotate 90° (same direction as
-                    // the player/shot rotation) so these enemies face left, toward the player.
                     Graphics2D g2d = (Graphics2D) g.create();
                     g2d.rotate(Math.toRadians(90), drawX + w / 2.0, drawY + h / 2.0);
                     g2d.drawImage(img, drawX, drawY, w, h, this);
@@ -357,9 +362,6 @@ public class Scene2 extends JPanel {
         int srcW = Boss.WIDTH;
         int srcH = Boss.HEIGHT;
 
-        // Minecraft-style "flash red when hit" -- tints the boss\'s own silhouette
-        // (via AlphaComposite.SRC_ATOP, which only paints where the destination
-        // already has alpha) rather than drawing a red box over/around it.
         float flash = boss.getDamageFlashIntensity();
         if (flash > 0f) {
             img = applyRedTint(img, srcW, srcH, flash);
@@ -399,13 +401,6 @@ public class Scene2 extends JPanel {
         }
     }
 
-    /**
-     * Returns a copy of {@code source} tinted red, masked by the source image's own
-     * alpha channel -- fully transparent pixels stay transparent, opaque pixels get
-     * blended toward solid red by {@code intensity} (0 = no change, 1 = fully red).
-     * Built on a fresh ARGB BufferedImage so SRC_ATOP has real per-pixel alpha to
-     * mask against (the on-screen Swing back-buffer isn't guaranteed to).
-     */
     private Image applyRedTint(Image source, int width, int height, float intensity) {
         BufferedImage tinted = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = tinted.createGraphics();
@@ -469,10 +464,8 @@ public class Scene2 extends JPanel {
 
                 int x = shot.getX();
                 int y = shot.getY();
-                int width = shot.getImage().getWidth(null);
-                int height = shot.getImage().getHeight(null);
 
-                g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
+                g2d.rotate(Math.toRadians(90), x + shot.getImage().getWidth(null) / 2.0, y + shot.getImage().getHeight(null) / 2.0);
 
                 g2d.drawImage(shot.getImage(), x, y, this);
                 g2d.dispose();
@@ -621,8 +614,6 @@ public class Scene2 extends JPanel {
         g2d.dispose();
     }
 
-    /** LASER: charging = thin flickering targeting line; firing = full-height beam
-     *  with a bright white-hot core fading to red/orange, plus animated shimmer strands. */
     private void drawLaserAttack(Graphics2D g2d, Boss boss, boolean charging) {
         for (int[] zone : boss.getActiveZones()) {
             int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
@@ -664,8 +655,6 @@ public class Scene2 extends JPanel {
         }
     }
 
-    /** TENTACLE_SLAM: charging = pulsing warning rings expanding from the target;
-     *  firing = radial burst fill with jagged crack lines radiating outward. */
     private void drawSlamAttack(Graphics2D g2d, Boss boss, boolean charging) {
         for (int[] zone : boss.getActiveZones()) {
             int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
@@ -694,8 +683,6 @@ public class Scene2 extends JPanel {
                 g2d.setPaint(burst);
                 g2d.fillOval((int) (cx - radius), (int) (cy - radius), (int) (radius * 2), (int) (radius * 2));
 
-                // Deterministic per-zone seed so the cracks stay stable for the whole
-                // firing window instead of jittering to a new random pattern every frame.
                 g2d.setColor(new Color(230, 255, 210, 200));
                 g2d.setStroke(new BasicStroke(2f));
                 Random crackRandom = new Random((long) cx * 73856093L ^ (long) cy * 19349663L);
@@ -710,8 +697,6 @@ public class Scene2 extends JPanel {
         }
     }
 
-    /** EYE_BEAM_BARRAGE: charging = flickering purple wash; firing = glowing bands
-     *  with a bright core line, same gradient technique as the laser. */
     private void drawEyeBeamAttack(Graphics2D g2d, Boss boss, boolean charging) {
         for (int[] zone : boss.getActiveZones()) {
             int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
@@ -742,14 +727,10 @@ public class Scene2 extends JPanel {
         }
     }
 
-    /** SPORE_SWARM: a cluster of small pulsing glowing particles scattered within
-     *  each zone, instead of one flat oval -- reads as an actual swarm. */
     private void drawSporeSwarmAttack(Graphics2D g2d, Boss boss, boolean charging) {
         int zoneIndex = 0;
         for (int[] zone : boss.getActiveZones()) {
             int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
-            // Deterministic per-zone seed so particle positions stay stable across
-            // frames within one attack, instead of re-randomizing every draw call.
             Random particleRandom = new Random((long) zx * 92821L ^ (long) zy * 68917L ^ zoneIndex);
 
             int particleCount = 6;
@@ -786,7 +767,6 @@ public class Scene2 extends JPanel {
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
-
         doDrawing(g);
     }
 
@@ -797,10 +777,6 @@ public class Scene2 extends JPanel {
             if (explosion.isVisible()) {
                 explosion.tickAnimation();
 
-                // Uses Explosion's own known base size/lifetime constants rather than
-                // querying the scaled image's width/height -- Image.getScaledInstance()
-                // fills in pixels asynchronously, so its dimensions aren't reliably
-                // queryable immediately after creation.
                 int lifeFrames = Explosion.getLifetimeFrames();
                 float progress = Math.min(1f, explosion.getAnimFrame() / (float) lifeFrames);
                 double scale = 0.6 + 0.9 * progress;
@@ -845,7 +821,7 @@ public class Scene2 extends JPanel {
             drawBossAttack(g);
             drawPlayer(g);
             drawShots(g);
-            drawExplosions(g); // drawn last so bursts always render on top, never hidden behind a sprite
+            drawExplosions(g);
             drawHealthBar(g);
             drawBossHealthBar(g);
             drawStatusHUD(g);
@@ -879,7 +855,6 @@ public class Scene2 extends JPanel {
         if (powerUpMessageTimer > 0 && !powerUpMessage.isEmpty()) {
             g.setFont(new Font("Helvetica", Font.BOLD, 18));
             g.setColor(new Color(255, 215, 0));
-            
             g.drawString(powerUpMessage, 200, 80); 
         }
     }
@@ -895,42 +870,88 @@ public class Scene2 extends JPanel {
     }
 
     private void drawVictory(Graphics g) {
-        g.setColor(Color.black);
-        g.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-        var titleFont = new Font("Helvetica", Font.BOLD, 28);
-        g.setFont(titleFont);
-        g.setColor(Color.GREEN);
-        var fmTitle = g.getFontMetrics(titleFont);
-        String title = "VICTORY! ALL STAGES CLEARED!";
-        g.drawString(title, (BOARD_WIDTH - fmTitle.stringWidth(title)) / 2, 100);
+        g2d.setColor(new Color(5, 12, 10, 220));
+        g2d.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 
-        var labelFont = new Font("Helvetica", Font.PLAIN, 18);
-        g.setFont(labelFont);
-        g.setColor(Color.WHITE);
+        int panelWidth = 540;
+        int panelHeight = 440;
+        int panelX = (BOARD_WIDTH - panelWidth) / 2;
+        int panelY = (BOARD_HEIGHT - panelHeight) / 2;
 
-        int lineX = 220;
-        int lineY = 170;
-        int lineGap = 30;
+        g2d.setColor(new Color(10, 32, 20, 240));
+        g2d.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
 
-        g.drawString("Final Score: " + score, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Time Taken: " + formatTime(frame), lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Scout Kills: " + scoutKills, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Wraith Kills: " + wraithKills, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Juggernaut Kills: " + juggernautKills, lineX, lineY);
-        lineY += lineGap;
-        g.drawString("Boss Defeated: " + BOSS_NAME, lineX, lineY);
+        GradientPaint winGlow = new GradientPaint(
+            panelX, panelY, new Color(50, 225, 100, 40),
+            panelX, panelY + panelHeight, new Color(0, 0, 0, 0)
+        );
+        g2d.setPaint(winGlow);
+        g2d.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
 
-        var smallFont = new Font("Helvetica", Font.BOLD, 14);
-        g.setFont(smallFont);
-        g.setColor(Color.YELLOW);
-        String prompt = "Press ENTER to Play Again";
-        var fmPrompt = g.getFontMetrics(smallFont);
-        g.drawString(prompt, (BOARD_WIDTH - fmPrompt.stringWidth(prompt)) / 2, 400);
+        g2d.setColor(new Color(255, 215, 0, 200));
+        g2d.setStroke(new BasicStroke(2f));
+        g2d.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
+
+        Font titleFont = new Font("Helvetica", Font.BOLD, 26);
+        g2d.setFont(titleFont);
+        FontMetrics fmTitle = g2d.getFontMetrics();
+        String title = "VICTORY! ALL STAGES CLEARED";
+        
+        g2d.setColor(new Color(0, 255, 120));
+        g2d.drawString(title, panelX + (panelWidth - fmTitle.stringWidth(title)) / 2, panelY + 50);
+
+        g2d.setColor(new Color(255, 215, 0, 120));
+        g2d.drawLine(panelX + 40, panelY + 68, panelX + panelWidth - 40, panelY + 68);
+
+        Font labelFont = new Font("Helvetica", Font.PLAIN, 15);
+        Font valFont = new Font("Helvetica", Font.BOLD, 15);
+        int startY = panelY + 110;
+        int rowGap = 32;
+        int col1X = panelX + 50;
+        int col2X = panelX + panelWidth / 2 + 10;
+
+        int totalKills = scoutKills + wraithKills + juggernautKills;
+
+        drawStatRow(g2d, "Final Score:", String.valueOf(score), col1X, startY, labelFont, valFont, new Color(255, 215, 0));
+        drawStatRow(g2d, "Clear Time:", formatTime(frame), col1X, startY + rowGap, labelFont, valFont, Color.WHITE);
+        drawStatRow(g2d, "Total Kills:", String.valueOf(totalKills), col1X, startY + rowGap * 2, labelFont, valFont, Color.CYAN);
+        drawStatRow(g2d, "Boss Eliminated:", BOSS_NAME, col1X, startY + rowGap * 3, labelFont, valFont, new Color(255, 100, 100));
+
+        drawStatRow(g2d, "Scouts:", String.valueOf(scoutKills), col2X, startY, labelFont, valFont, Color.LIGHT_GRAY);
+        drawStatRow(g2d, "Wraiths:", String.valueOf(wraithKills), col2X, startY + rowGap, labelFont, valFont, Color.LIGHT_GRAY);
+        drawStatRow(g2d, "Juggernauts:", String.valueOf(juggernautKills), col2X, startY + rowGap * 2, labelFont, valFont, Color.LIGHT_GRAY);
+
+        int promptY = panelY + panelHeight - 75;
+        g2d.setColor(new Color(0, 190, 255, 80));
+        g2d.drawLine(panelX + 40, promptY - 15, panelX + panelWidth - 40, promptY - 15);
+
+        Font promptFont = new Font("Helvetica", Font.BOLD, 16);
+        g2d.setFont(promptFont);
+        g2d.setColor(Color.YELLOW);
+        FontMetrics fmPrompt = g2d.getFontMetrics();
+        String promptText = "PRESS ENTER TO PLAY AGAIN";
+        g2d.drawString(promptText, panelX + (panelWidth - fmPrompt.stringWidth(promptText)) / 2, promptY + 15);
+
+        g2d.dispose();
+    }
+
+    private void drawStatRow(Graphics2D g2d, String label, String value, int x, int y, Font labelFont, Font valFont, Color valColor) {
+        g2d.setFont(labelFont);
+        g2d.setColor(new Color(200, 230, 210));
+        g2d.drawString(label, x, y);
+
+        g2d.setFont(valFont);
+        g2d.setColor(valColor);
+        int valueX = x + g2d.getFontMetrics(labelFont).stringWidth(label) + 8;
+        g2d.drawString(value, valueX, y);
+    }
+
+    private boolean rectsOverlap(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2) {
+        return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
     }
 
     private void update() {
@@ -955,6 +976,9 @@ public class Scene2 extends JPanel {
                 case "PowerUp-MultiShot":
                     powerUps.add(new MultiShot(sd.x, sd.y));
                     break;
+                case "PowerUp-HealUp": 
+                    powerUps.add(new HealUp(sd.x, sd.y));
+                    break;
                 default:
                     System.out.println("Unknown spawn type: " + sd.type);
                     break;
@@ -965,6 +989,36 @@ public class Scene2 extends JPanel {
             player.act();
         }
 
+        // --- PLAYER VS ENEMY DIRECT COLLISION CHECK ---
+        if (player != null && player.isVisible()) {
+            for (Enemy enemy : enemies) {
+                int enemyX = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxX() : enemy.getX();
+                int enemyY = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxY() : enemy.getY();
+                int hitWidth = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxWidth() : ALIEN_WIDTH;
+                int hitHeight = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxHeight() : ALIEN_HEIGHT;
+
+                if (enemy.isVisible() && rectsOverlap(player.getX(), player.getY(), PLAYER_WIDTH, PLAYER_HEIGHT,
+                        enemyX, enemyY, hitWidth, hitHeight)) {
+                    
+                    player.hit(); // Lose 1 HP on impact
+
+                    // Non-boss enemies are destroyed on impact with the player
+                    if (!(enemy instanceof Boss)) {
+                        enemy.die();
+                        explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+                    }
+
+                    if (player.isDying()) {
+                        var ii = new ImageIcon(IMG_EXPLOSION);
+                        var scaledDeathImg = ii.getImage().getScaledInstance(
+                                PLAYER_WIDTH, PLAYER_HEIGHT, java.awt.Image.SCALE_SMOOTH);
+                        player.setImage(scaledDeathImg);
+                    }
+                    break; // Process one collision frame at a time
+                }
+            }
+        }
+
         // Update shots + check collision with enemies
         List<Shot> shotsToRemove = new ArrayList<>();
         for (Shot shot : shots) {
@@ -973,10 +1027,6 @@ public class Scene2 extends JPanel {
                 int shotY = shot.getY();
 
                 for (Enemy enemy : enemies) {
-                    // Boss uses a tighter hitbox matching the visible creature body,
-                    // not its full padded canvas (Boss.WIDTH/HEIGHT) -- otherwise shots
-                    // register as hits while still in transparent space nowhere near
-                    // the actual art, and impact explosions spawn off in empty space.
                     int enemyX = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxX() : enemy.getX();
                     int enemyY = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxY() : enemy.getY();
 
@@ -989,15 +1039,11 @@ public class Scene2 extends JPanel {
                             && shotY >= enemyY
                             && shotY <= enemyY + hitHeight) {
 
-                        // Boss only takes damage once fully engaged (see Boss.hit()) -- checked
-                        // here, before hit() runs, purely to know whether to spawn an impact burst.
                         boolean bossTookRealDamage = (enemy instanceof Boss) && ((Boss) enemy).hasEngaged();
 
                         boolean enemyDied = enemy.hit();
 
                         if (enemy instanceof Boss && bossTookRealDamage) {
-                            // Impact burst right where the bullet connected -- fires on every
-                            // hit, not just the kill, since the boss survives many hits.
                             explosions.add(new Explosion(shotX, shotY));
                         }
 
@@ -1005,10 +1051,6 @@ public class Scene2 extends JPanel {
                             deaths++;
                             AudioPlayer.playSoundEffect(Global.AUD_EXPLODE);
                             if (!(enemy instanceof Boss)) {
-                                // Regular enemies vanish on death, so their death burst is
-                                // still centered on the enemy itself. The boss survives the
-                                // fight until this final blow, and already got its own
-                                // per-hit impact burst above at the exact point of contact.
                                 explosions.add(new Explosion(enemy.getX(), enemy.getY()));
                             }
 
@@ -1026,7 +1068,8 @@ public class Scene2 extends JPanel {
                                         System.err.println("Error stopping background audio: " + e.getMessage());
                                     }
                                 }
-                                AudioPlayer.playSoundEffect(Global.AUD_LEVEL_UP);
+                                AudioPlayer.playSoundEffect(Global.AUD_VICTORY);
+
                             } else if (enemy instanceof Alien3) {
                                 juggernautKills++;
                                 score += 300;
@@ -1073,6 +1116,7 @@ public class Scene2 extends JPanel {
         Boss boss = findBoss();
         if (boss != null && boss.isVisible()) {
 
+            // OLD CODE (Line ~757):
             if (!bossMusicStarted) {
                 try {
                     if (audioPlayer != null) {
@@ -1185,10 +1229,13 @@ public class Scene2 extends JPanel {
                         powerUpMessage = "Speed Increased!";
                     } else if (pu instanceof MultiShot) {
                         powerUpMessage = "Multi-Shot Activated!";
+                    } else if (pu instanceof HealUp) {
+                        powerUpMessage = "Health Restored (+1 HP)!";
                     }
-                    powerUpMessageTimer = 60; 
 
+                    powerUpMessageTimer = 60; 
                     powerUpsToRemove.add(pu);
+                    
                 } else if (pu.getX() < -32) {
                     pu.die();
                     powerUpsToRemove.add(pu);
@@ -1247,7 +1294,6 @@ public class Scene2 extends JPanel {
 
                 int maxShots = player.getMaxShots();
                 if (shots.size() < maxShots) {
-                    // If maxShots > 1, spawn offset shots
                     if (maxShots >= 3) {
                         shots.add(new Shot(x, y - 10));
                         shots.add(new Shot(x, y));
