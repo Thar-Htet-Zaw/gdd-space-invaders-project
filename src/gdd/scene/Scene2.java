@@ -138,7 +138,7 @@ public class Scene2 extends JPanel {
                 audioPlayer.stop();
             }
             audioPlayer = new AudioPlayer(Global.AUD_SCENE2);
-            audioPlayer.play();
+            audioPlayer.loop(); // SEAMLESS LOOPING
         } catch (Exception e) {
             System.err.println("Error playing Stage 2 audio: " + e.getMessage());
         }
@@ -184,7 +184,7 @@ public class Scene2 extends JPanel {
         FORMATION_V_SMALL, FORMATION_WALL_SMALL, FORMATION_V_LARGE, FORMATION_WALL_LARGE, FORMATION_DIAGONAL_LARGE
     };
 
-    private static final boolean SKIP_WAVES_FOR_TESTING = false; // Turned off testing mode
+    private static final boolean SKIP_WAVES_FOR_TESTING = false; 
 
     private void loadSpawnDetails() {
         if (SKIP_WAVES_FOR_TESTING) {
@@ -193,68 +193,73 @@ public class Scene2 extends JPanel {
             return;
         }
 
-        // --- PRE-BOSS HEALTH PACKS & POWER-UPS (0 to 1 Minute) ---
-        spawnMap.put(300,  new SpawnDetails("PowerUp-HealUp", 720, 200));   // 5 sec
-        spawnMap.put(900,  new SpawnDetails("PowerUp-HealUp", 720, 350));   // 15 sec
-        spawnMap.put(1800, new SpawnDetails("PowerUp-HealUp", 720, 150));   // 30 sec
-        spawnMap.put(2700, new SpawnDetails("PowerUp-HealUp", 720, 400));   // 45 sec
-        spawnMap.put(3300, new SpawnDetails("PowerUp-HealUp", 720, 250));   // 55 sec (Just before Boss)
+        // --- PRE-BOSS HEALTH PACKS & POWER-UPS (0 to 4 Minutes / 14400 Frames) ---
+        // Health Packs across 4 mins
+        spawnMap.put(1200,  new SpawnDetails("PowerUp-HealUp", 720, 200));   // 20 sec
+        spawnMap.put(3600,  new SpawnDetails("PowerUp-HealUp", 720, 350));   // 1 min
+        spawnMap.put(6000,  new SpawnDetails("PowerUp-HealUp", 720, 150));   // 1 min 40 sec
+        spawnMap.put(8400,  new SpawnDetails("PowerUp-HealUp", 720, 400));   // 2 min 20 sec
+        spawnMap.put(10800, new SpawnDetails("PowerUp-HealUp", 720, 250));   // 3 min
+        spawnMap.put(13200, new SpawnDetails("PowerUp-HealUp", 720, 300));   // 3 min 40 sec (Just before Boss)
 
-        // Pre-boss utility power-ups
-        spawnMap.put(600,  new SpawnDetails("PowerUp-SpeedUp", 720, 150));
-        spawnMap.put(1200, new SpawnDetails("PowerUp-MultiShot", 720, 300));
-        spawnMap.put(2100, new SpawnDetails("PowerUp-SpeedUp", 720, 250));
-        spawnMap.put(3000, new SpawnDetails("PowerUp-MultiShot", 720, 350));
+        // Utility Power-ups across 4 mins
+        spawnMap.put(2400,  new SpawnDetails("PowerUp-SpeedUp", 720, 150));   // 40 sec
+        spawnMap.put(4800,  new SpawnDetails("PowerUp-MultiShot", 720, 300)); // 1 min 20 sec
+        spawnMap.put(7200,  new SpawnDetails("PowerUp-SpeedUp", 720, 250));   // 2 min
+        spawnMap.put(9600,  new SpawnDetails("PowerUp-MultiShot", 720, 350)); // 2 min 40 sec
+        spawnMap.put(12000, new SpawnDetails("PowerUp-SpeedUp", 720, 200));   // 3 min 20 sec
 
-        // --- ENEMY WAVES (Packed into 1 Minute) ---
+        // --- ENEMY WAVES (Packed across 4 Minutes) ---
         int frameCursor = 120;
 
-        // Rapid Warmup Waves
-        for (int i = 0; i < 6; i++) {
-            String type = (i % 2 == 0) ? "Alien2" : "Alien1";
-            for (int k = 0; k < 3; k++) {
-                spawnMap.put(frameCursor, new SpawnDetails(type, 720, 80 + randomizer.nextInt(460)));
-                frameCursor += 30;
+        // Wave loop to fill the 4-minute gap (up to ~14000 frames)
+        while (frameCursor < 14000) {
+            // Rapid Warmup Waves
+            for (int i = 0; i < 4 && frameCursor < 14000; i++) {
+                String type = (i % 2 == 0) ? "Alien2" : "Alien1";
+                for (int k = 0; k < 3; k++) {
+                    spawnMap.put(frameCursor, new SpawnDetails(type, 720, 80 + randomizer.nextInt(460)));
+                    frameCursor += 40;
+                }
+                frameCursor += 180;
             }
-            frameCursor += 150;
-        }
 
-        // Formation Assault
-        for (int wave = 0; wave < 8; wave++) {
-            int[][] formation = FORMATIONS[wave % FORMATIONS.length];
-            String enemyType = (wave % 3 == 0) ? "Alien3" : ((wave % 2 == 0) ? "Alien2" : "Alien1");
-            int baseY = 160 + randomizer.nextInt(250);
+            // Formation Assault
+            for (int wave = 0; wave < 5 && frameCursor < 14000; wave++) {
+                int[][] formation = FORMATIONS[wave % FORMATIONS.length];
+                String enemyType = (wave % 3 == 0) ? "Alien3" : ((wave % 2 == 0) ? "Alien2" : "Alien1");
+                int baseY = 160 + randomizer.nextInt(250);
 
-            for (int i = 0; i < formation.length; i++) {
-                int dx = formation[i][0];
-                int dy = formation[i][1];
-                spawnMap.put(frameCursor + i, new SpawnDetails(enemyType, 720 + dx, baseY + dy));
+                for (int i = 0; i < formation.length; i++) {
+                    int dx = formation[i][0];
+                    int dy = formation[i][1];
+                    spawnMap.put(frameCursor + i, new SpawnDetails(enemyType, 720 + dx, baseY + dy));
+                }
+                frameCursor += formation.length + 220;
             }
-            frameCursor += formation.length + 180;
+
+            // Heavy Minion Rush
+            for (int j = 0; j < 6 && frameCursor < 14000; j++) {
+                spawnMap.put(frameCursor, new SpawnDetails("Alien3", 720, 150 + randomizer.nextInt(300)));
+                spawnMap.put(frameCursor + 20, new SpawnDetails("Alien1", 720, 100));
+                spawnMap.put(frameCursor + 40, new SpawnDetails("Alien1", 720, 500));
+                frameCursor += 160;
+            }
         }
 
-        // Heavy Minion Rush
-        while (frameCursor < 3420) {
-            spawnMap.put(frameCursor, new SpawnDetails("Alien3", 720, 150 + randomizer.nextInt(300)));
-            spawnMap.put(frameCursor + 15, new SpawnDetails("Alien1", 720, 100));
-            spawnMap.put(frameCursor + 30, new SpawnDetails("Alien1", 720, 500));
-            frameCursor += 120;
-        }
-
-        // --- BOSS ARRIVAL AT EXACTLY 1 MINUTE (3600 FRAMES) ---
-        bossSpawnFrame = 3600; 
+        // --- BOSS ARRIVAL AT EXACTLY 4 MINUTES (14400 FRAMES) ---
+        bossSpawnFrame = 14400; 
         spawnMap.put(bossSpawnFrame, new SpawnDetails("Boss", 720, 100));
 
         // --- MID-BOSS FIGHT POWER-UPS & HEALTH PACKS ---
-        // Spawns health packs every ~15-20 seconds AFTER the boss arrives to keep the player alive
-        spawnMap.put(4500,  new SpawnDetails("PowerUp-HealUp", 720, 200));   // 1m 15s
-        spawnMap.put(5400,  new SpawnDetails("PowerUp-HealUp", 720, 400));   // 1m 30s
-        spawnMap.put(6300,  new SpawnDetails("PowerUp-MultiShot", 720, 300)); // 1m 45s (Weapon boost)
-        spawnMap.put(7200,  new SpawnDetails("PowerUp-HealUp", 720, 150));   // 2m 00s
-        spawnMap.put(8100,  new SpawnDetails("PowerUp-HealUp", 720, 350));   // 2m 15s
-        spawnMap.put(9000,  new SpawnDetails("PowerUp-SpeedUp", 720, 250));   // 2m 30s
-        spawnMap.put(9900,  new SpawnDetails("PowerUp-HealUp", 720, 200));   // 2m 45s
-        spawnMap.put(10800, new SpawnDetails("PowerUp-HealUp", 720, 400));   // 3m 00s
+        spawnMap.put(15300, new SpawnDetails("PowerUp-HealUp", 720, 200));   // 4m 15s
+        spawnMap.put(16200, new SpawnDetails("PowerUp-HealUp", 720, 400));   // 4m 30s
+        spawnMap.put(17100, new SpawnDetails("PowerUp-MultiShot", 720, 300)); // 4m 45s
+        spawnMap.put(18000, new SpawnDetails("PowerUp-HealUp", 720, 150));   // 5m 00s
+        spawnMap.put(18900, new SpawnDetails("PowerUp-HealUp", 720, 350));   // 5m 15s
+        spawnMap.put(19800, new SpawnDetails("PowerUp-SpeedUp", 720, 250));   // 5m 30s
+        spawnMap.put(20700, new SpawnDetails("PowerUp-HealUp", 720, 200));   // 5m 45s
+        spawnMap.put(21600, new SpawnDetails("PowerUp-HealUp", 720, 400));   // 6m 00s
     }
 
     private void gameInit() {
@@ -283,7 +288,7 @@ public class Scene2 extends JPanel {
                 audioPlayer.stop();
             }
             audioPlayer = new AudioPlayer(Global.AUD_SCENE2);
-            audioPlayer.play();
+            audioPlayer.loop(); // SEAMLESS LOOPING
         } catch (Exception e) {
             System.err.println("Error resetting audio: " + e.getMessage());
         }
@@ -697,10 +702,6 @@ public class Scene2 extends JPanel {
         }
     }
 
-    /** EYE_BEAM_BARRAGE: charging = thin flickering targeting line with glowing "eye"
-     *  orbs at both ends (no more flat rectangle flash); firing = several thin glowing
-     *  beam strands per band (reads as a barrage of individual beams, not one solid
-     *  block) with brighter eye-glints anchoring each end. */
     private void drawEyeBeamAttack(Graphics2D g2d, Boss boss, boolean charging) {
         for (int[] zone : boss.getActiveZones()) {
             int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
@@ -718,9 +719,6 @@ public class Scene2 extends JPanel {
                     g2d.fillOval(zx + zw - glintSize / 2, centerY - glintSize / 2, glintSize, glintSize);
                 }
             } else {
-                // Several thin parallel strands instead of one filled rectangle --
-                // each strand gets a soft glow via a few overlaid strokes, widest
-                // and dimmest on the outside, narrowest and brightest in the center.
                 int strandCount = 4;
                 int strandSpacing = Math.max(1, zh / (strandCount + 1));
                 for (int s = 1; s <= strandCount; s++) {
@@ -746,9 +744,6 @@ public class Scene2 extends JPanel {
         }
     }
 
-    /** SPORE_SWARM: bigger, slowly-drifting particles connected by faint tendril
-     *  threads (reads as a linked cluster, not scattered dots), wrapped in a soft
-     *  hazy cloud that ties the whole zone together into one cohesive swarm. */
     private void drawSporeSwarmAttack(Graphics2D g2d, Boss boss, boolean charging) {
         int zoneIndex = 0;
         for (int[] zone : boss.getActiveZones()) {
@@ -770,12 +765,11 @@ public class Scene2 extends JPanel {
                 double driftSpeed = 0.3 + particleRandom.nextDouble() * 0.4;
                 sizeFactor[i] = 0.6 + particleRandom.nextDouble() * 0.9;
 
-                double angle = baseAngle + frame * 0.02 * driftSpeed; // slow orbital drift
+                double angle = baseAngle + frame * 0.02 * driftSpeed; 
                 px[i] = cx + Math.cos(angle) * baseDist;
-                py[i] = cy + Math.sin(angle) * baseDist * 0.8; // slightly flattened orbit
+                py[i] = cy + Math.sin(angle) * baseDist * 0.8; 
             }
 
-            // Soft hazy cloud ties the swarm together into one cohesive attack zone
             float[] fractions = {0f, 1f};
             Color[] hazeColors = {
                 new Color(110, 255, 90, charging ? 35 : 55),
@@ -785,8 +779,6 @@ public class Scene2 extends JPanel {
             g2d.fillOval((int) (cx - clusterRadius), (int) (cy - clusterRadius),
                     (int) (clusterRadius * 2), (int) (clusterRadius * 2));
 
-            // Faint tendril threads between neighboring spores -- reads as a
-            // connected cluster instead of scattered random dots
             g2d.setColor(new Color(170, 255, 130, charging ? 35 : 60));
             g2d.setStroke(new BasicStroke(1f));
             for (int i = 0; i < particleCount; i++) {
@@ -794,9 +786,6 @@ public class Scene2 extends JPanel {
                 g2d.drawLine((int) px[i], (int) py[i], (int) px[next], (int) py[next]);
             }
 
-            // The spores themselves -- varied sizes, pulsing, glowing core. Base size
-            // roughly doubled from before (22 vs 14) so the swarm actually reads as
-            // a real threat instead of a handful of small dots.
             for (int i = 0; i < particleCount; i++) {
                 double pulse = 0.75 + 0.25 * Math.sin(frame * 0.25 + i * 1.7);
                 int baseSize = charging ? 12 : 22;
@@ -913,9 +902,21 @@ public class Scene2 extends JPanel {
 
     private void drawPowerUpMessage(Graphics g) {
         if (powerUpMessageTimer > 0 && !powerUpMessage.isEmpty()) {
-            g.setFont(new Font("Helvetica", Font.BOLD, 18));
-            g.setColor(new Color(255, 215, 0));
-            g.drawString(powerUpMessage, 200, 80); 
+            Font font = new Font("Helvetica", Font.BOLD, 16);
+            g.setFont(font);
+            FontMetrics fm = g.getFontMetrics(font);
+            
+            // Center the message horizontally
+            int x = (BOARD_WIDTH - fm.stringWidth(powerUpMessage)) / 2;
+            int y = 110; // Placed right below the Boss Health Bar (y: 75-100)
+
+            // Shadow / Outline for readability against high-contrast backgrounds
+            g.setColor(Color.BLACK);
+            g.drawString(powerUpMessage, x + 1, y + 1);
+
+            // Primary Message Color
+            g.setColor(new Color(255, 215, 0)); // Gold
+            g.drawString(powerUpMessage, x, y);
         }
     }
 
@@ -1062,7 +1063,6 @@ public class Scene2 extends JPanel {
                     
                     player.hit(); // Lose 1 HP on impact
 
-                    // Non-boss enemies are destroyed on impact with the player
                     if (!(enemy instanceof Boss)) {
                         enemy.die();
                         explosions.add(new Explosion(enemy.getX(), enemy.getY()));
@@ -1074,7 +1074,7 @@ public class Scene2 extends JPanel {
                                 PLAYER_WIDTH, PLAYER_HEIGHT, java.awt.Image.SCALE_SMOOTH);
                         player.setImage(scaledDeathImg);
                     }
-                    break; // Process one collision frame at a time
+                    break; 
                 }
             }
         }
@@ -1176,14 +1176,13 @@ public class Scene2 extends JPanel {
         Boss boss = findBoss();
         if (boss != null && boss.isVisible()) {
 
-            // OLD CODE (Line ~757):
             if (!bossMusicStarted) {
                 try {
                     if (audioPlayer != null) {
                         audioPlayer.stop();
                     }
                     audioPlayer = new AudioPlayer(Global.AUD_BOSS);
-                    audioPlayer.play();
+                    audioPlayer.loop(); // SEAMLESS LOOPING FOR BOSS BGM TOO
                     bossMusicStarted = true;
                 } catch (Exception e) {
                     System.err.println("Error switching to boss music: " + e.getMessage());
@@ -1354,10 +1353,6 @@ public class Scene2 extends JPanel {
 
                 if (shots.size() < player.getMaxShots()) {
                     if (player.hasMultiShot()) {
-                        // 2 parallel bullets -- same trajectory, just offset vertically
-                        // at spawn. Shot has no angle/diagonal movement, so this can't
-                        // drift into a "spread" pattern; that's the separate, optional
-                        // Three-way Shot upgrade. Matches Scene1's identical logic.
                         shots.add(new Shot(x, y - 10));
                         shots.add(new Shot(x, y + 10));
                     } else {

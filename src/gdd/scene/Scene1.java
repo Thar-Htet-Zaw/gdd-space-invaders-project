@@ -3,7 +3,7 @@ package gdd.scene;
 import gdd.AudioPlayer;
 import gdd.Game;
 import gdd.Global;
- 
+
 import static gdd.Global.*;
 import gdd.SpawnDetails;
 import gdd.powerup.PowerUp;
@@ -28,7 +28,6 @@ import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.Graphics;
-import java.awt.Image;
 import java.awt.Toolkit;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -55,7 +54,6 @@ public class Scene1 extends JPanel {
     private List<Shot> shots;
     private List<Bomb> bombs;
     private Player player;
-    // private Shot shot;
  
     final int BLOCKHEIGHT = 50;
     final int BLOCKWIDTH = 50;
@@ -81,7 +79,8 @@ public class Scene1 extends JPanel {
     private long score = 0;
     private int shotsFired = 0;
     private boolean showDashboard = false;
-    private static final int STAGE_DURATION_FRAMES = 1 * 60 * 60; // TEMP: 1 minute for testing — change back to 5 * 60 * 60 before submitting
+    // Set to 5 minutes (5 min * 60 sec * 60 frames/sec = 18,000 frames)
+    private static final int STAGE_DURATION_FRAMES = 5 * 60 * 60; 
     private Rectangle continueButtonBounds;
  
     private final Dimension d = new Dimension(BOARD_WIDTH, BOARD_HEIGHT);
@@ -90,9 +89,6 @@ public class Scene1 extends JPanel {
     private Timer timer;
     private final Game game;
  
-    private int currentRow = -1;
-    // TODO load this map from a file
-    private int mapOffset = 0;
     private final int[][] MAP = {
         {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -122,31 +118,13 @@ public class Scene1 extends JPanel {
  
     private HashMap<Integer, SpawnDetails> spawnMap = new HashMap<>();
     private AudioPlayer audioPlayer;
-    private int lastRowToShow;
-    private int firstRowToShow;
  
     public Scene1(Game game) {
         this.game = game;
-        // initBoard();
-        // gameInit();
         loadSpawnDetails();
     }
  
-    private void initAudio() {
-        try {
-            String filePath = "src/audio/scene1.wav";
-            audioPlayer = new AudioPlayer(filePath);
-            audioPlayer.play();
-        } catch (Exception e) {
-            System.err.println("Error initializing audio player: " + e.getMessage());
-        }
-    }
- 
     // --- Enemy formation templates ---
-    // Each entry is {dx, dy}: dx is how much further off-screen (to the right) that member
-    // spawns, dy is its vertical offset from the wave's base Y. Because every enemy in a
-    // formation is the SAME type (so they all move at the same speed), these offsets stay
-    // fixed relative to each other the whole time they cross the screen — the shape holds.
     private static final int[][] FORMATION_V_SMALL = {
         {0, 0}, {45, -45}, {45, 45}
     };
@@ -173,70 +151,74 @@ public class Scene1 extends JPanel {
     };
  
     private void loadSpawnDetails() {
-        // Power-up spawns first, well before any enemies — gives the player
-        // a clear window to grab it without an enemy arriving at the same time.
+        // --- POWER-UPS ---
+        // Speed-Up: Only appears once (early game)
         spawnMap.put(30, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
-        spawnMap.put(1600, new SpawnDetails("PowerUp-MultiShot", 720, 300));
-        spawnMap.put(800, new SpawnDetails("PowerUp-HealUp", 720, 250));
- 
-        // --- Formation-based enemy spawning ---
-        // Instead of lone enemies trickling in, enemies now spawn together in tight,
-        // recognizable formations (a V, a wall, a diagonal line) that cross the screen
-        // as a group. Early waves use smaller 3-enemy formations of easy Scouts; later
-        // waves use bigger 5-enemy formations and tougher enemy types, and the breather
-        // between waves shrinks over time so the stage keeps ramping up.
-        int numberOfWaves = 95;
-        int frameCursor = 300; // small buffer before the first wave starts
- 
-        for (int wave = 0; wave < numberOfWaves; wave++) {
-            boolean useLargeFormation = wave >= 25;
+
+        // Multi-Shot: Only appears once (early-mid game)
+        spawnMap.put(1200, new SpawnDetails("PowerUp-MultiShot", 720, 300));
+
+        // Heal-Ups: Plentiful recovery packs spread evenly throughout the full 5 minutes
+        spawnMap.put(1500, new SpawnDetails("PowerUp-HealUp", 720, 250)); // ~0:25
+        spawnMap.put(3800, new SpawnDetails("PowerUp-HealUp", 720, 350)); // ~1:03
+        spawnMap.put(6200, new SpawnDetails("PowerUp-HealUp", 720, 180)); // ~1:43
+        spawnMap.put(8800, new SpawnDetails("PowerUp-HealUp", 720, 420)); // ~2:26
+        spawnMap.put(11200, new SpawnDetails("PowerUp-HealUp", 720, 280)); // ~3:06
+        spawnMap.put(13800, new SpawnDetails("PowerUp-HealUp", 720, 150)); // ~3:50
+        spawnMap.put(16200, new SpawnDetails("PowerUp-HealUp", 720, 380)); // ~4:30
+
+        // --- CONTINUOUS ENEMY WAVES (Up to 5:00 / 18,000 frames) ---
+        int frameCursor = 300; 
+        int wave = 0;
+
+        // Keep generating waves until we get within 8–10 seconds of the 5-minute victory mark
+        while (frameCursor < STAGE_DURATION_FRAMES - 500) {
+            wave++;
+            
+            // Keep small formations longer so medium difficulty is maintained
+            boolean useLargeFormation = wave >= 20; 
             int[][][] formationSet = useLargeFormation ? LARGE_FORMATIONS : SMALL_FORMATIONS;
             int[][] formation = formationSet[wave % formationSet.length];
- 
+
             String enemyType = pickEnemyTypeForWave(wave);
-            // Base Y clamped so every member of the formation (offsets up to +-100) stays
-            // fully on-screen vertically.
-            int baseY = 160 + randomizer.nextInt(300);
- 
+            int baseY = 160 + randomizer.nextInt(280);
+
             for (int i = 0; i < formation.length; i++) {
                 int dx = formation[i][0];
                 int dy = formation[i][1];
-                // The +i is just to keep HashMap keys unique — it's 1 frame apart at most,
-                // so it doesn't noticeably affect the formation's timing. The dx offset
-                // (spawning further off-screen) is what creates the staggered, shaped entry.
-                spawnMap.put(frameCursor + i, new SpawnDetails(enemyType, 720 + dx, baseY + dy));
+                spawnMap.put(frameCursor + (i * 2), new SpawnDetails(enemyType, 720 + dx, baseY + dy));
             }
- 
-            int lullAfterWave = Math.max(120, 400 - wave * 8); // shrinks from ~6.7s to ~2s
- 
-            // Randomly sneak a lone enemy into the lull, at an unpredictable moment, so
-            // the breather between formations isn't 100% safe/telegraphed every time.
-            int loneSpawnChance = 55; // % chance per wave
-            if (lullAfterWave > 60 && randomizer.nextInt(100) < loneSpawnChance) {
+
+            // Steady pacing: ~4 seconds rest between waves (240 frames)
+            int lullAfterWave = Math.max(210, 300 - wave * 2); 
+
+            // Occasional single scout during lulls (30% chance)
+            int loneSpawnChance = 30; 
+            if (lullAfterWave > 100 && randomizer.nextInt(100) < loneSpawnChance) {
                 int loneOffset = formation.length + randomizer.nextInt(lullAfterWave);
                 int loneFrame = frameCursor + loneOffset;
-                String loneType = pickEnemyTypeForWave(wave);
-                int loneY = 60 + randomizer.nextInt(500);
-                spawnMap.put(loneFrame, new SpawnDetails(loneType, 720, loneY));
+                
+                // Ensure lone spawns don't spill past the 5-minute timer
+                if (loneFrame < STAGE_DURATION_FRAMES) {
+                    int loneY = 80 + randomizer.nextInt(440);
+                    spawnMap.put(loneFrame, new SpawnDetails("Alien1", 720, loneY));
+                }
             }
- 
+
             frameCursor += formation.length + lullAfterWave;
         }
     }
- 
+
     /**
-     * Picks a single enemy type to use for an entire formation. Early waves lean almost
-     * entirely on Alien1 (fast, fragile "Scouts"). Later waves mix in more Alien2
-     * ("Wraiths", zigzag movement) and Alien3 ("Juggernauts", tanky) so the stage
-     * escalates smoothly. Using one type per formation keeps the shape intact, since
-     * mixing enemy types with different speeds would stretch the formation apart.
+     * Rebalanced to keep late-game manageable and fun.
      */
     private String pickEnemyTypeForWave(int wave) {
         int roll = randomizer.nextInt(100);
- 
-        int juggernautChance = Math.min(40, wave * 3);    // grows from 0% to ~40%
-        int wraithChance = Math.min(40, 10 + wave * 2);   // grows from ~10% to ~40%
- 
+
+        // Capped so easier Scouts remain common throughout the stage
+        int juggernautChance = Math.min(20, wave * 2);  // Max 20% Juggernaut chance
+        int wraithChance = Math.min(30, 10 + wave * 2); // Max 30% Wraith chance
+
         if (roll < juggernautChance) {
             return "Alien3";
         } else if (roll < juggernautChance + wraithChance) {
@@ -244,10 +226,6 @@ public class Scene1 extends JPanel {
         } else {
             return "Alien1";
         }
-    }
- 
-    private void initBoard() {
- 
     }
  
     public void start() {
@@ -261,26 +239,49 @@ public class Scene1 extends JPanel {
         timer.start();
  
         gameInit();
-        //initAudio();
     }
- 
-    public void stop() {
+
+    // Called specifically when the 5-minute timer finishes / Victory condition triggers
+    private void onTimerFinished() {
+        inGame = false;
+        isVictory = true;
+
+        // 1. Stop the Scene 1 loop timer
         if (timer != null && timer.isRunning()) {
             timer.stop();
         }
+
+        // 2. Stop the BGM ONLY because the timer expired and victory is achieved
         if (audioPlayer != null) {
             try {
                 audioPlayer.stop(); 
-                audioPlayer = null;
             } catch (Exception e) {
-                System.err.println("Error stopping audio: " + e.getMessage());
+                System.err.println("Error stopping audio on timer end: " + e.getMessage());
             }
         }
+
+        // 3. Play victory SFX and display victory overlay
+        AudioPlayer.playSoundEffect(Global.AUD_STAGE1_VICTORY);
+        showVictoryScreen();
+    }
+
+    private void showVictoryScreen() {
+        showDashboard = true;
+        repaint();
+    }
+
+    // Called when transitioning out of Scene 1 (e.g., advancing to Scene 2 early)
+    public void stop() {
+        // Stop the frame loop timer so it doesn't continue ticking in the background
+        if (timer != null && timer.isRunning()) {
+            timer.stop();
+        }
+        // Notice: audioPlayer is NOT stopped here, allowing BGM to continue playing into Scene 2!
     }
  
     private void gameInit() {
- 
         inGame = true;
+        isVictory = false;
         showDashboard = false;
         frame = 0;
         deaths = 0;
@@ -289,37 +290,33 @@ public class Scene1 extends JPanel {
         juggernautKills = 0;
         score = 0;
         shotsFired = 0;
- 
+
         player = new Player();
- 
+
         enemies = new ArrayList<>();
         powerups = new ArrayList<>();
         explosions = new ArrayList<>();
         shots = new ArrayList<>();
         bombs = new ArrayList<>();
- 
+
         try {
             if (audioPlayer != null) {
                 audioPlayer.stop();
             }
             audioPlayer = new AudioPlayer("src/audio/scene1.wav");
-            audioPlayer.play();
+            
+            // USE loop() INSTEAD OF play() FOR SEAMLESS BGM REPEAT
+            audioPlayer.loop(); 
+
         } catch (Exception e) {
             System.err.println("Error playing audio: " + e.getMessage());
         }
     }
  
     private void drawMap(Graphics g) {
-        // How far through the stage we are, 0.0 (just started) to 1.0 (stage end).
-        // Reuses the same STAGE_DURATION_FRAMES already used for the countdown timer
-        // and win condition, so this stays automatically in sync with the real
-        // stage length (currently the 1-minute testing value; will stretch back out
-        // correctly once reverted to 5*60*60 for submission).
         double progress = Math.min(1.0, (double) frame / STAGE_DURATION_FRAMES);
         float[] zoneWeights = computeZoneWeights(progress);
 
-        // Three theme keyframes: calm blue-white (easy) -> tense amber (medium) ->
-        // intense red (hard, foreshadowing Stage 2's danger-zone palette).
         Color mainColor = blendColor(
                 new Color(210, 230, 255),
                 new Color(255, 190, 100),
@@ -336,58 +333,37 @@ public class Scene1 extends JPanel {
                 new Color(60, 5, 5),
                 zoneWeights);
 
-        // Subtle full-screen mood wash, drawn first (before the stars), very low
-        // alpha so it never interferes with reading enemies/shots/UI on top.
         Graphics2D tintG2d = (Graphics2D) g.create();
         tintG2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f));
         tintG2d.setColor(tintColor);
         tintG2d.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
         tintG2d.dispose();
 
-        // Calculate smooth scrolling offset horizontally (1 pixel per frame)
         int scrollOffset = (frame) % BLOCKWIDTH;
-
-        // Calculate which columns to draw based on screen position
         int baseCol = (frame) / BLOCKWIDTH;
-        int colsNeeded = (BOARD_WIDTH / BLOCKWIDTH) + 2; // +2 for smooth scrolling
+        int colsNeeded = (BOARD_WIDTH / BLOCKWIDTH) + 2; 
 
-        // Loop through columns that should be visible on screen
         for (int screenCol = 0; screenCol < colsNeeded; screenCol++) {
-            // Calculate which MAP column to use (with wrapping)
-            // Note: Since MAP is 2D array [row][col], we wrap based on the row length
             int mapCol = (baseCol + screenCol) % MAP[0].length;
-
-            // Calculate X position for this column to scroll left
             int x = BOARD_WIDTH - ((screenCol * BLOCKWIDTH) - scrollOffset);
 
-            // Skip if column is completely off-screen
             if (x > BOARD_WIDTH || x < -BLOCKWIDTH) {
                 continue;
             }
 
-            // Draw each row in this column
             for (int row = 0; row < MAP.length; row++) {
                 if (MAP[row][mapCol] == 1) {
-                    // Calculate Y position
                     int y = row * BLOCKHEIGHT;
-
-                    // Draw a cluster of stars, tinted for the current stage zone
                     drawStarCluster(g, x, y, BLOCKWIDTH, BLOCKHEIGHT, mainColor, accentColor);
                 }
             }
         }
     }
 
-    /**
-     * Returns {easyWeight, mediumWeight, hardWeight} (always summing to 1.0) for a
-     * given stage-progress fraction (0.0-1.0). Easy: 0%-35%. Medium: 35%-70%.
-     * Hard: 70%-100%. An 8%-wide smooth ramp is centered on each boundary (35%,
-     * 70%) so the theme blends gradually rather than snapping between zones.
-     */
     private float[] computeZoneWeights(double progress) {
         double boundary1 = 0.35;
         double boundary2 = 0.70;
-        double half = 0.04; // 8% total transition width, centered on each boundary
+        double half = 0.04;
 
         float easyW, mediumW, hardW;
 
@@ -407,7 +383,6 @@ public class Scene1 extends JPanel {
         return new float[]{easyW, mediumW, hardW};
     }
 
-    /** Linearly blends 3 colors by weight (weights should sum to ~1.0). */
     private Color blendColor(Color easy, Color medium, Color hard, float[] w) {
         int r = (int) (easy.getRed() * w[0] + medium.getRed() * w[1] + hard.getRed() * w[2]);
         int gg = (int) (easy.getGreen() * w[0] + medium.getGreen() * w[1] + hard.getGreen() * w[2]);
@@ -420,20 +395,17 @@ public class Scene1 extends JPanel {
     }
 
     private void drawStarCluster(Graphics g, int x, int y, int width, int height, Color mainColor, Color accentColor) {
-        // Main star (larger) -- uses the blended theme color for this moment in the stage
         int centerX = x + width / 2;
         int centerY = y + height / 2;
         g.setColor(mainColor);
         g.fillOval(centerX - 2, centerY - 2, 4, 4);
 
-        // Smaller surrounding stars
         g.setColor(accentColor);
         g.fillOval(centerX - 15, centerY - 10, 2, 2);
         g.fillOval(centerX + 12, centerY - 8, 2, 2);
         g.fillOval(centerX - 8, centerY + 12, 2, 2);
         g.fillOval(centerX + 10, centerY + 15, 2, 2);
 
-        // Tiny stars for more detail
         g.fillOval(centerX - 20, centerY + 5, 1, 1);
         g.fillOval(centerX + 18, centerY - 15, 1, 1);
         g.fillOval(centerX - 5, centerY - 18, 1, 1);
@@ -441,16 +413,9 @@ public class Scene1 extends JPanel {
     }
  
     private void drawAliens(Graphics g) {
-
         for (Enemy enemy : enemies) {
-
             if (enemy.isVisible()) {
-
                 enemy.tickAnimation();
-
-                // Subtle "breathing" pulse -- a pure-drawing transform on the existing
-                // sprite image (no new art). Small amplitude so it reads as alive
-                // rather than glitchy.
                 double pulse = 1.0 + 0.06 * Math.sin(enemy.getAnimFrame() * 0.15);
                 Image img = enemy.getImage();
                 int baseW = img.getWidth(this);
@@ -460,8 +425,6 @@ public class Scene1 extends JPanel {
                 int drawX = enemy.getX() - (w - baseW) / 2;
                 int drawY = enemy.getY() - (h - baseH) / 2;
 
-                // Source art faces downward by default; rotate 90° (same direction as
-                // the player/shot rotation) so these enemies face left, toward the player.
                 Graphics2D g2d = (Graphics2D) g.create();
                 g2d.rotate(Math.toRadians(90), drawX + w / 2.0, drawY + h / 2.0);
                 g2d.drawImage(img, drawX, drawY, w, h, this);
@@ -469,22 +432,15 @@ public class Scene1 extends JPanel {
             }
             
             if (enemy.isDying()) {
-
                 enemy.die();
             }
         }
     }
  
     private void drawPowreUps(Graphics g) {
-
         for (PowerUp p : powerups) {
-
             if (p.isVisible()) {
-
                 p.tickAnimation();
-
-                // Fake "coin spin" -- squash horizontally with a cosine wave to
-                // simulate rotation using the existing icon, no new art needed.
                 double scaleX = Math.abs(Math.cos(p.getAnimFrame() * 0.08));
                 Image img = p.getImage();
                 int baseW = img.getWidth(this);
@@ -496,7 +452,6 @@ public class Scene1 extends JPanel {
             }
 
             if (p.isDying()) {
-
                 p.die();
             }
         }
@@ -507,39 +462,28 @@ public class Scene1 extends JPanel {
             player.tickAnimation();
 
             Graphics2D g2d = (Graphics2D) g.create();
-            
-            // Get player coordinates and image dimensions
             int x = player.getX();
             int y = player.getY();
             int width = player.getImage().getWidth(null);
             int height = player.getImage().getHeight(null);
  
-            // Rotate around the center of the player ship
             g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
 
-            // Subtle engine-thrust pulse -- scales the ship slightly each frame.
-            // Pure drawing transform, no new art needed.
             double pulse = 1.0 + 0.04 * Math.sin(player.getAnimFrame() * 0.3);
             int w = (int) (width * pulse);
             int h = (int) (height * pulse);
             int dx = x - (w - width) / 2;
             int dy = y - (h - height) / 2;
 
-            // Draw the player
             g2d.drawImage(player.getImage(), dx, dy, w, h, this);
-            
-            // Dispose the graphics context copy
             g2d.dispose();
         }
     }
  
     private void drawShot(Graphics g) {
-
-        // Inside Scene1.java where you draw shots:
         for (Shot shot : shots) {
             if (shot.isVisible()) {
                 shot.tickAnimation();
-
                 Graphics2D g2d = (Graphics2D) g.create();
 
                 int x = shot.getX();
@@ -547,9 +491,7 @@ public class Scene1 extends JPanel {
                 int width = shot.getImage().getWidth(null);
                 int height = shot.getImage().getHeight(null);
 
-                // Rotate 90 degrees so the vertical line becomes horizontal
                 g2d.rotate(Math.toRadians(90), x + width / 2.0, y + height / 2.0);
-
                 g2d.drawImage(shot.getImage(), x, y, this);
                 g2d.dispose();
             }
@@ -560,9 +502,6 @@ public class Scene1 extends JPanel {
         for (Bomb bomb : bombs) {
             if (bomb.isVisible()) {
                 bomb.tickAnimation();
-
-                // Small pulse so the bomb reads as active/dangerous, not a
-                // frozen icon. Pure drawing transform, no new art.
                 double pulse = 1.0 + 0.15 * Math.sin(bomb.getAnimFrame() * 0.4);
                 Image img = bomb.getImage();
                 int baseW = img.getWidth(this);
@@ -577,29 +516,12 @@ public class Scene1 extends JPanel {
         }
     }
  
-    private void drawBombing(Graphics g) {
- 
-        // for (Enemy e : enemies) {
-        //     Enemy.Bomb b = e.getBomb();
-        //     if (!b.isDestroyed()) {
-        //         g.drawImage(b.getImage(), b.getX(), b.getY(), this);
-        //     }
-        // }
-    }
- 
     private void drawExplosions(Graphics g) {
-
         List<Explosion> toRemove = new ArrayList<>();
 
         for (Explosion explosion : explosions) {
-
             if (explosion.isVisible()) {
                 explosion.tickAnimation();
-
-                // Grow-and-fade burst. Uses Explosion's own known base size/lifetime
-                // constants rather than querying the scaled image's width/height --
-                // Image.getScaledInstance() fills in pixels asynchronously, so its
-                // dimensions aren't reliably queryable immediately after creation.
                 int lifeFrames = Explosion.getLifetimeFrames();
                 float progress = Math.min(1f, explosion.getAnimFrame() / (float) lifeFrames);
                 double scale = 0.6 + 0.9 * progress;
@@ -624,14 +546,12 @@ public class Scene1 extends JPanel {
                 }
             }
         }
-
         explosions.removeAll(toRemove);
     }
  
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
- 
         doDrawing(g);
     }
  
@@ -641,13 +561,11 @@ public class Scene1 extends JPanel {
     }
  
     private void drawPickupMessage(Graphics g) {
-        if (pickupMessage == null) {
-            return;
-        }
+        if (pickupMessage == null) return;
  
         float alpha;
         if (pickupMessageFrame <= PICKUP_MESSAGE_HOLD_FRAMES) {
-            alpha = 1.0f; // fully visible during the hold period
+            alpha = 1.0f;
         } else {
             int fadeProgress = pickupMessageFrame - PICKUP_MESSAGE_HOLD_FRAMES;
             alpha = 1.0f - ((float) fadeProgress / PICKUP_MESSAGE_FADE_FRAMES);
@@ -661,13 +579,11 @@ public class Scene1 extends JPanel {
         var fm = g2d.getFontMetrics();
         int textWidth = fm.stringWidth(pickupMessage);
         int x = (BOARD_WIDTH - textWidth) / 2;
-        int y = 100; // below the top HUD text, centered horizontally
+        int y = 100;
         g2d.drawString(pickupMessage, x, y);
         g2d.dispose();
     }
  
-    // HUD layout below matches Scene2's drawHealthBar/drawStatusHUD exactly (same
-    // coordinates, fonts, and draw order) so both stages present a consistent dashboard.
     private void drawKillCounts(Graphics g) {
         g.setColor(Color.WHITE);
         var small = new Font("Helvetica", Font.PLAIN, 13);
@@ -686,8 +602,6 @@ public class Scene1 extends JPanel {
         g.setFont(timerFont);
         var fm = g.getFontMetrics(timerFont);
  
-        // Flash red in the last 10 seconds to warn the player (Scene1-specific --
-        // Scene2 has no stage timer to warn about, so this behavior only exists here)
         if (framesLeft <= 10 * 60) {
             g.setColor(frame % 30 < 15 ? Color.RED : Color.WHITE);
         } else {
@@ -714,7 +628,6 @@ public class Scene1 extends JPanel {
  
         int totalHealth = 5;
         int currentHealth = player.getHealth();
- 
         int x = 10;
         int y = 40;
         int barWidth = 150;
@@ -735,40 +648,31 @@ public class Scene1 extends JPanel {
     }
  
     private void doDrawing(Graphics g) {
- 
         g.setColor(Color.black);
         g.fillRect(0, 0, d.width, d.height);
- 
         g.setColor(Color.green);
  
         if (inGame) {
- 
-            drawMap(g);  // Draw background stars first
+            drawMap(g);  
             drawPowreUps(g);
             drawAliens(g);
             drawBombs(g);
             drawPlayer(g);
             drawShot(g);
-            drawExplosions(g); // drawn last so bursts always render on top, never hidden behind a sprite
+            drawExplosions(g); 
             drawHealthBar(g);
             drawKillCounts(g);
             drawPickupMessage(g);
             drawTimer(g);
- 
         } else if (showDashboard) {
- 
             if (timer.isRunning()) {
                 timer.stop();
             }
- 
             drawDashboard(g);
- 
         } else {
- 
             if (timer.isRunning()) {
                 timer.stop();
             }
- 
             gameOver(g);
         }
  
@@ -776,7 +680,7 @@ public class Scene1 extends JPanel {
     }
  
     private String formatTime(int frames) {
-        int totalSeconds = frames / 60; // timer runs at 60 FPS
+        int totalSeconds = frames / 60; 
         int minutes = totalSeconds / 60;
         int seconds = totalSeconds % 60;
         return String.format("%d:%02d", minutes, seconds);
@@ -787,21 +691,17 @@ public class Scene1 extends JPanel {
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-        // 1. Semi-transparent dark overlay over frozen gameplay
         g2d.setColor(new Color(5, 10, 20, 210));
         g2d.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 
-        // Panel Position & Dimensions
         int panelWidth = 520;
         int panelHeight = 480;
         int panelX = (BOARD_WIDTH - panelWidth) / 2;
         int panelY = (BOARD_HEIGHT - panelHeight) / 2;
 
-        // 2. Glassmorphism Panel Base
         g2d.setColor(new Color(12, 24, 40, 235));
         g2d.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
 
-        // Inner subtle gradient shine
         GradientPaint glassShine = new GradientPaint(
             panelX, panelY, new Color(0, 180, 255, 30),
             panelX, panelY + panelHeight, new Color(0, 0, 0, 0)
@@ -809,12 +709,10 @@ public class Scene1 extends JPanel {
         g2d.setPaint(glassShine);
         g2d.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
 
-        // Neon Outer Border & Corner Accents
         g2d.setColor(new Color(0, 190, 255, 180));
         g2d.setStroke(new BasicStroke(2f));
         g2d.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 24, 24);
 
-        // Corner decorative notches
         int notchSize = 12;
         g2d.setColor(new Color(255, 215, 0, 220));
         g2d.drawLine(panelX + 20, panelY + 12, panelX + 20 + notchSize, panelY + 12);
@@ -822,23 +720,19 @@ public class Scene1 extends JPanel {
         g2d.drawLine(panelX + panelWidth - 20 - notchSize, panelY + 12, panelX + panelWidth - 20, panelY + 12);
         g2d.drawLine(panelX + panelWidth - 12, panelY + 20, panelX + panelWidth - 12, panelY + 20 + notchSize);
 
-        // 3. Header Banner
         Font titleFont = new Font("Helvetica", Font.BOLD, 24);
         g2d.setFont(titleFont);
         FontMetrics fmTitle = g2d.getFontMetrics();
         String title = "STAGE 1 COMPLETE";
         
-        // Header Glow
         g2d.setColor(new Color(255, 215, 0, 80));
         g2d.drawString(title, panelX + (panelWidth - fmTitle.stringWidth(title)) / 2 + 1, panelY + 45 + 1);
         g2d.setColor(new Color(255, 215, 0));
         g2d.drawString(title, panelX + (panelWidth - fmTitle.stringWidth(title)) / 2, panelY + 45);
 
-        // Divider Line
         g2d.setColor(new Color(0, 190, 255, 100));
         g2d.drawLine(panelX + 30, panelY + 62, panelX + panelWidth - 30, panelY + 62);
 
-        // 4. Combat Statistics Grid Layout
         Font labelFont = new Font("Helvetica", Font.PLAIN, 14);
         Font valFont = new Font("Helvetica", Font.BOLD, 14);
         
@@ -850,7 +744,6 @@ public class Scene1 extends JPanel {
         int totalKills = scoutKills + wraithKills + juggernautKills;
         int accuracy = shotsFired > 0 ? Math.min(100, (int) (100.0 * totalKills / shotsFired)) : 0;
 
-        // Left Column Stats
         drawStatRow(g2d, "Score:", String.valueOf(score), col1X, startY, labelFont, valFont, new Color(255, 215, 0));
         drawStatRow(g2d, "Time Survived:", formatTime(frame), col1X, startY + rowGap, labelFont, valFont, Color.WHITE);
         drawStatRow(g2d, "Enemies Slain:", String.valueOf(totalKills), col1X, startY + rowGap * 2, labelFont, valFont, Color.CYAN);
@@ -858,18 +751,15 @@ public class Scene1 extends JPanel {
         drawStatRow(g2d, "  • Wraith Kills:", String.valueOf(wraithKills), col1X, startY + rowGap * 4, labelFont, valFont, Color.LIGHT_GRAY);
         drawStatRow(g2d, "  • Juggernaut Kills:", String.valueOf(juggernautKills), col1X, startY + rowGap * 5, labelFont, valFont, Color.LIGHT_GRAY);
 
-        // Right Column Stats
         drawStatRow(g2d, "Shots Fired:", String.valueOf(shotsFired), col2X, startY, labelFont, valFont, Color.WHITE);
         drawStatRow(g2d, "Accuracy:", accuracy + "%", col2X, startY + rowGap, labelFont, valFont, accuracy >= 50 ? Color.GREEN : Color.ORANGE);
         drawStatRow(g2d, "Health:", Math.max(0, player.getHealth()) + " / 5", col2X, startY + rowGap * 2, labelFont, valFont, Color.GREEN);
         drawStatRow(g2d, "Final Speed:", String.valueOf(player.getSpeed()), col2X, startY + rowGap * 3, labelFont, valFont, Color.WHITE);
         drawStatRow(g2d, "Max Shots:", String.valueOf(player.getMaxShots()), col2X, startY + rowGap * 4, labelFont, valFont, Color.WHITE);
 
-        // Lower Divider
         g2d.setColor(new Color(0, 190, 255, 100));
         g2d.drawLine(panelX + 30, panelY + panelHeight - 95, panelX + panelWidth - 30, panelY + panelHeight - 95);
 
-        // 5. Interactive Action Button
         int buttonWidth = 240;
         int buttonHeight = 44;
         int buttonX = panelX + (panelWidth - buttonWidth) / 2;
@@ -877,7 +767,6 @@ public class Scene1 extends JPanel {
 
         continueButtonBounds = new Rectangle(buttonX, buttonY, buttonWidth, buttonHeight);
 
-        // Gradient Action Button Base
         GradientPaint btnGrad = new GradientPaint(
             buttonX, buttonY, new Color(0, 180, 80),
             buttonX, buttonY + buttonHeight, new Color(0, 90, 40)
@@ -886,12 +775,10 @@ public class Scene1 extends JPanel {
         g2d.setPaint(btnGrad);
         g2d.fillRoundRect(buttonX, buttonY, buttonWidth, buttonHeight, 14, 14);
 
-        // Highlight Border
         g2d.setColor(new Color(120, 255, 160));
         g2d.setStroke(new BasicStroke(1.5f));
         g2d.drawRoundRect(buttonX, buttonY, buttonWidth, buttonHeight, 14, 14);
 
-        // Button Text
         Font btnFont = new Font("Helvetica", Font.BOLD, 15);
         g2d.setFont(btnFont);
         g2d.setColor(Color.WHITE);
@@ -899,7 +786,6 @@ public class Scene1 extends JPanel {
         String btnText = "CONTINUE TO STAGE 2";
         g2d.drawString(btnText, buttonX + (buttonWidth - fmBtn.stringWidth(btnText)) / 2, buttonY + 27);
 
-        // Subtext Prompt
         Font hintFont = new Font("Helvetica", Font.ITALIC, 11);
         g2d.setFont(hintFont);
         g2d.setColor(new Color(180, 210, 230));
@@ -910,7 +796,6 @@ public class Scene1 extends JPanel {
         g2d.dispose();
     }
 
-    // Helper method to draw clean key-value stat pairs
     private void drawStatRow(Graphics2D g2d, String label, String value, int x, int y, Font labelFont, Font valFont, Color valColor) {
         g2d.setFont(labelFont);
         g2d.setColor(new Color(200, 220, 240));
@@ -938,18 +823,13 @@ public class Scene1 extends JPanel {
     }
  
     private void update() {
- 
-        // Check enemy spawn
-        // TODO this approach can only spawn one enemy at a frame
         SpawnDetails sd = spawnMap.get(frame);
         if (sd != null) {
-            // Create a new enemy based on the spawn details
             switch (sd.type) {
                 case "Alien1":
                     Enemy enemy = new Alien1(sd.x, sd.y);
                     enemies.add(enemy);
                     break;
-                // Add more cases for different enemy types if needed
                 case "Alien2":
                     Enemy enemy2 = new Alien2(sd.x, sd.y);
                     enemies.add(enemy2);
@@ -959,7 +839,6 @@ public class Scene1 extends JPanel {
                     enemies.add(enemy3);
                     break;
                 case "PowerUp-SpeedUp":
-                    // Handle speed up item spawn
                     PowerUp speedUp = new SpeedUp(sd.x, sd.y);
                     powerups.add(speedUp);
                     break;
@@ -977,27 +856,14 @@ public class Scene1 extends JPanel {
             }
         }
  
+        // Handles 5-minute timer expiration (Victory)
         if (inGame && frame >= STAGE_DURATION_FRAMES) {
-            inGame = false;
-            showDashboard = true;
-            isVictory = true;
-            timer.stop();
-
-            if (audioPlayer != null) {
-                try {
-                    audioPlayer.stop();
-                } catch (Exception e) {
-                    System.err.println("Error stopping audio: " + e.getMessage());
-                }
-            }
-
-            AudioPlayer.playSoundEffect(Global.AUD_STAGE1_VICTORY);
+            onTimerFinished();
         }
  
-        // player
+        // Player update
         player.act();
  
-        // Power-ups
         // Power-ups
         for (PowerUp powerup : powerups) {
             if (powerup.isVisible()) {
@@ -1014,12 +880,10 @@ public class Scene1 extends JPanel {
                     } else if (powerup instanceof HealUp) { 
                         showPickupMessage("Health Restored!");
                     }
-
                 }
             }
         }
  
-        // Pickup message countdown (hold, then fade, then clear)
         if (pickupMessage != null) {
             pickupMessageFrame++;
             if (pickupMessageFrame > PICKUP_MESSAGE_HOLD_FRAMES + PICKUP_MESSAGE_FADE_FRAMES) {
@@ -1033,16 +897,11 @@ public class Scene1 extends JPanel {
             if (enemy.isVisible()) {
                 enemy.act(direction);
 
-                // --- Player vs Enemy Collision Check ---
                 if (player.isVisible() && !player.isDying()) {
-                    // Using your existing collidesWith method!
                     if (player.collidesWith(enemy)) { 
-                        
-                        // 1. Damage player
                         player.hit();
                         AudioPlayer.playSoundEffect(Global.AUD_EXPLODE);
 
-                        // 2. Damage/destroy enemy
                         boolean enemyDied = enemy.hit();
                         if (enemyDied) {
                             explosions.add(new Explosion(enemy.getX(), enemy.getY()));
@@ -1060,7 +919,6 @@ public class Scene1 extends JPanel {
                             }
                         }
 
-                        // 3. Set player explosion graphic if hp drops to 0
                         if (player.isDying()) {
                             var ii = new ImageIcon(IMG_EXPLOSION);
                             var scaledDeathImg = ii.getImage().getScaledInstance(
@@ -1070,7 +928,6 @@ public class Scene1 extends JPanel {
                     }
                 }
 
-                // Roll the odds for this enemy to drop a bomb this frame
                 Bomb newBomb = enemy.maybeDropBomb();
                 if (newBomb != null) {
                     bombs.add(newBomb);
@@ -1078,8 +935,7 @@ public class Scene1 extends JPanel {
             }
         }
  
-        // Bombs: move them, check collision with player, clean up off-screen ones
-        // Bombs: move them, check collision with player, clean up off-screen ones
+        // Bombs
         List<Bomb> bombsToRemove = new ArrayList<>();
         for (Bomb bomb : bombs) {
             if (!bomb.isVisible()) {
@@ -1100,12 +956,10 @@ public class Scene1 extends JPanel {
                     && bombY >= playerY
                     && bombY <= playerY + PLAYER_HEIGHT) {
  
-                // 1. Subtract health and destroy the bomb
                 player.hit();
                 bomb.die();
                 bombsToRemove.add(bomb);
  
-                // 2. Only change the image to an explosion if health reached 0
                 if (player.isDying()) {
                     var ii = new ImageIcon(IMG_EXPLOSION);
                     var scaledDeathImg = ii.getImage().getScaledInstance(
@@ -1123,31 +977,30 @@ public class Scene1 extends JPanel {
         if (player.isDying()) {
             player.die();
             inGame = false;
-            timer.stop();
+            if (timer != null && timer.isRunning()) {
+                timer.stop();
+            }
             message = "Game Over";
  
             if (audioPlayer != null) {
                 try {
-                    audioPlayer.stop(); // Stops background music
+                    audioPlayer.stop(); 
                 } catch (Exception e) {
                     System.err.println("Error stopping audio: " + e.getMessage());
                 }
             }
  
-            // Play game over sound effect
             AudioPlayer.playSoundEffect(Global.AUD_GAMEOVER);
         }
  
-        // shot
+        // Shots
         List<Shot> shotsToRemove = new ArrayList<>();
         for (Shot shot : shots) {
- 
             if (shot.isVisible()) {
                 int shotX = shot.getX();
                 int shotY = shot.getY();
  
                 for (Enemy enemy : enemies) {
-                    // Collision detection: shot and enemy
                     int enemyX = enemy.getX();
                     int enemyY = enemy.getY();
  
@@ -1157,18 +1010,12 @@ public class Scene1 extends JPanel {
                             && shotY >= (enemyY)
                             && shotY <= (enemyY + ALIEN_HEIGHT)) {
  
-                        boolean enemyDied = enemy.hit(); // decrements HP; true only when HP hits 0
+                        boolean enemyDied = enemy.hit(); 
  
                         if (enemyDied) {
-                            // NOTE: previously also did enemy.setImage(raw IMG_EXPLOSION) here,
-                            // unscaled. With a small template image that was invisible; with a
-                            // full-res AI-generated image it flashed a giant unscaled sprite for
-                            // one frame. Removed -- the animated Explosion sprite below (already
-                            // scaled to EXPLOSION_SIZE and grow-and-fade animated) is the visual.
                             explosions.add(new Explosion(enemyX, enemyY));
                             deaths++;
  
-                            // Play explosion sound
                             AudioPlayer.playSoundEffect("src/audio/explode.wav");
  
                             if (enemy instanceof Alien3) {
@@ -1183,14 +1030,13 @@ public class Scene1 extends JPanel {
                             }
                         }
  
-                        shot.die(); // shot is consumed on impact either way
+                        shot.die(); 
                         shotsToRemove.add(shot);
                     }
                 }
  
-                // Replace the existing y-axis logic in the shot loop:
                 int x = shot.getX();
-                x += 20; // Move right instead of up
+                x += 20; 
  
                 if (x > BOARD_WIDTH) {
                     shot.die();
@@ -1201,73 +1047,6 @@ public class Scene1 extends JPanel {
             }
         }
         shots.removeAll(shotsToRemove);
- 
-        // enemies
-        // for (Enemy enemy : enemies) {
-        //     int x = enemy.getX();
-        //     if (x >= BOARD_WIDTH - BORDER_RIGHT && direction != -1) {
-        //         direction = -1;
-        //         for (Enemy e2 : enemies) {
-        //             e2.setY(e2.getY() + GO_DOWN);
-        //         }
-        //     }
-        //     if (x <= BORDER_LEFT && direction != 1) {
-        //         direction = 1;
-        //         for (Enemy e : enemies) {
-        //             e.setY(e.getY() + GO_DOWN);
-        //         }
-        //     }
-        // }
-        // for (Enemy enemy : enemies) {
-        //     if (enemy.isVisible()) {
-        //         int y = enemy.getY();
-        //         if (y > GROUND - ALIEN_HEIGHT) {
-        //             inGame = false;
-        //             message = "Invasion!";
-        //         }
-        //         enemy.act(direction);
-        //     }
-        // }
-        // bombs - collision detection
-        // Bomb is with enemy, so it loops over enemies
-        /*
-        for (Enemy enemy : enemies) {
- 
-            int chance = randomizer.nextInt(15);
-            Enemy.Bomb bomb = enemy.getBomb();
- 
-            if (chance == CHANCE && enemy.isVisible() && bomb.isDestroyed()) {
- 
-                bomb.setDestroyed(false);
-                bomb.setX(enemy.getX());
-                bomb.setY(enemy.getY());
-            }
- 
-            int bombX = bomb.getX();
-            int bombY = bomb.getY();
-            int playerX = player.getX();
-            int playerY = player.getY();
- 
-            if (player.isVisible() && !bomb.isDestroyed()
-                    && bombX >= (playerX)
-                    && bombX <= (playerX + PLAYER_WIDTH)
-                    && bombY >= (playerY)
-                    && bombY <= (playerY + PLAYER_HEIGHT)) {
- 
-                var ii = new ImageIcon(IMG_EXPLOSION);
-                player.setImage(ii.getImage());
-                player.setDying(true);
-                bomb.setDestroyed(true);
-            }
- 
-            if (!bomb.isDestroyed()) {
-                bomb.setY(bomb.getY() + 1);
-                if (bomb.getY() >= GROUND - BOMB_HEIGHT) {
-                    bomb.setDestroyed(true);
-                }
-            }
-        }
-         */
     }
  
     private void doGameCycle() {
@@ -1277,7 +1056,6 @@ public class Scene1 extends JPanel {
     }
  
     private class GameCycle implements ActionListener {
- 
         @Override
         public void actionPerformed(ActionEvent e) {
             doGameCycle();
@@ -1287,58 +1065,50 @@ public class Scene1 extends JPanel {
     private class TAdapter extends KeyAdapter {
         @Override
         public void keyReleased(KeyEvent e) {
-        if (inGame && player != null) {
-            player.keyReleased(e);
+            if (inGame && player != null) {
+                player.keyReleased(e);
+            }
         }
-    }
 
-    @Override
-    public void keyPressed(KeyEvent e) {
-        int key = e.getKeyCode();
+        @Override
+        public void keyPressed(KeyEvent e) {
+            int key = e.getKeyCode();
 
-        // 1. Check if the player is on the victory screen and pressed ENTER
-        if (!inGame) {
-            if (key == KeyEvent.VK_ENTER) {
+            if (!inGame) {
+                if (key == KeyEvent.VK_ENTER) {
                     if (isVictory || showDashboard) {
-                        Scene1.this.stop(); 
-                        game.loadScene2();
+                        proceedToScene2();
                     } else {
                         Scene1.this.stop(); 
                         game.loadScene1();
                     }
                 }
                 return;
-        }
+            }
 
-        player.keyPressed(e);
+            player.keyPressed(e);
 
-        int x = player.getX();
-        int y = player.getY();
+            int x = player.getX();
+            int y = player.getY();
 
-        if (key == KeyEvent.VK_SPACE) {
-            if (shots.size() < player.getMaxShots()) {
-                if (player.hasMultiShot()) {
-                    // 2 parallel bullets -- same trajectory, just offset vertically
-                    // at spawn. Shot has no angle/diagonal movement, so this can't
-                    // drift into a "spread" pattern; that's the separate, optional
-                    // Three-way Shot upgrade.
-                    shots.add(new Shot(x, y - 10));
-                    shots.add(new Shot(x, y + 10));
-                    shotsFired += 2;
-                } else {
-                    shots.add(new Shot(x, y));
-                    shotsFired++;
+            if (key == KeyEvent.VK_SPACE) {
+                if (shots.size() < player.getMaxShots()) {
+                    if (player.hasMultiShot()) {
+                        shots.add(new Shot(x, y - 10));
+                        shots.add(new Shot(x, y + 10));
+                        shotsFired += 2;
+                    } else {
+                        shots.add(new Shot(x, y));
+                        shotsFired++;
+                    }
+
+                    AudioPlayer.playSoundEffect("src/audio/fire.wav");
                 }
-
-                // Sound effect triggers on shot creation
-                AudioPlayer.playSoundEffect("src/audio/fire.wav");
             }
         }
     }
-    }
 
     private class MAdapter extends MouseAdapter {
-
         @Override
         public void mouseClicked(MouseEvent e) {
             if (showDashboard && continueButtonBounds != null

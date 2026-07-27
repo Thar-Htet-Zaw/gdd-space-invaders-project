@@ -8,9 +8,9 @@ import javax.swing.ImageIcon;
 public class Player extends Sprite {
 
     private static final int START_X = 50; 
-    private static final int START_Y = 250; // Hardcoded middle Y coordinate
+    private static final int START_Y = 250; 
     private int currentSpeed = 4;
-    private int maxShots = 4; // on-screen shot CAPACITY cap only -- unrelated to how many bullets fire per press
+    private int maxShots = 4; 
 
     // Multi-shot pickup: fires 2 parallel bullets per press instead of 1 (both
     // travel straight ahead -- Shot has no angle/diagonal movement at all, so this
@@ -73,7 +73,7 @@ public class Player extends Sprite {
     public int getHealth() {
         return health;
     }
-    
+
     public void setHealth(int health) {
         this.health = health;
     }
