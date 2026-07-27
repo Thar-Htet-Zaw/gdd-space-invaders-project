@@ -310,56 +310,129 @@ public class Scene1 extends JPanel {
     }
  
     private void drawMap(Graphics g) {
+        // How far through the stage we are, 0.0 (just started) to 1.0 (stage end).
+        // Reuses the same STAGE_DURATION_FRAMES already used for the countdown timer
+        // and win condition, so this stays automatically in sync with the real
+        // stage length (currently the 1-minute testing value; will stretch back out
+        // correctly once reverted to 5*60*60 for submission).
+        double progress = Math.min(1.0, (double) frame / STAGE_DURATION_FRAMES);
+        float[] zoneWeights = computeZoneWeights(progress);
+
+        // Three theme keyframes: calm blue-white (easy) -> tense amber (medium) ->
+        // intense red (hard, foreshadowing Stage 2's danger-zone palette).
+        Color mainColor = blendColor(
+                new Color(210, 230, 255),
+                new Color(255, 190, 100),
+                new Color(255, 70, 40),
+                zoneWeights);
+        Color accentColor = blendColor(
+                new Color(140, 180, 255),
+                new Color(255, 140, 40),
+                new Color(200, 30, 20),
+                zoneWeights);
+        Color tintColor = blendColor(
+                new Color(20, 30, 60),
+                new Color(60, 35, 10),
+                new Color(60, 5, 5),
+                zoneWeights);
+
+        // Subtle full-screen mood wash, drawn first (before the stars), very low
+        // alpha so it never interferes with reading enemies/shots/UI on top.
+        Graphics2D tintG2d = (Graphics2D) g.create();
+        tintG2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f));
+        tintG2d.setColor(tintColor);
+        tintG2d.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+        tintG2d.dispose();
+
         // Calculate smooth scrolling offset horizontally (1 pixel per frame)
         int scrollOffset = (frame) % BLOCKWIDTH;
- 
+
         // Calculate which columns to draw based on screen position
         int baseCol = (frame) / BLOCKWIDTH;
         int colsNeeded = (BOARD_WIDTH / BLOCKWIDTH) + 2; // +2 for smooth scrolling
- 
+
         // Loop through columns that should be visible on screen
         for (int screenCol = 0; screenCol < colsNeeded; screenCol++) {
             // Calculate which MAP column to use (with wrapping)
             // Note: Since MAP is 2D array [row][col], we wrap based on the row length
             int mapCol = (baseCol + screenCol) % MAP[0].length;
- 
+
             // Calculate X position for this column to scroll left
             int x = BOARD_WIDTH - ((screenCol * BLOCKWIDTH) - scrollOffset);
- 
+
             // Skip if column is completely off-screen
             if (x > BOARD_WIDTH || x < -BLOCKWIDTH) {
                 continue;
             }
- 
+
             // Draw each row in this column
             for (int row = 0; row < MAP.length; row++) {
                 if (MAP[row][mapCol] == 1) {
                     // Calculate Y position
                     int y = row * BLOCKHEIGHT;
- 
-                    // Draw a cluster of stars
-                    drawStarCluster(g, x, y, BLOCKWIDTH, BLOCKHEIGHT);
+
+                    // Draw a cluster of stars, tinted for the current stage zone
+                    drawStarCluster(g, x, y, BLOCKWIDTH, BLOCKHEIGHT, mainColor, accentColor);
                 }
             }
         }
     }
- 
-    private void drawStarCluster(Graphics g, int x, int y, int width, int height) {
-        // Set star color to white
-        g.setColor(Color.WHITE);
- 
-        // Draw multiple stars in a cluster pattern
-        // Main star (larger)
+
+    /**
+     * Returns {easyWeight, mediumWeight, hardWeight} (always summing to 1.0) for a
+     * given stage-progress fraction (0.0-1.0). Easy: 0%-35%. Medium: 35%-70%.
+     * Hard: 70%-100%. An 8%-wide smooth ramp is centered on each boundary (35%,
+     * 70%) so the theme blends gradually rather than snapping between zones.
+     */
+    private float[] computeZoneWeights(double progress) {
+        double boundary1 = 0.35;
+        double boundary2 = 0.70;
+        double half = 0.04; // 8% total transition width, centered on each boundary
+
+        float easyW, mediumW, hardW;
+
+        if (progress <= boundary1 - half) {
+            easyW = 1f; mediumW = 0f; hardW = 0f;
+        } else if (progress < boundary1 + half) {
+            float t = (float) ((progress - (boundary1 - half)) / (2 * half));
+            easyW = 1f - t; mediumW = t; hardW = 0f;
+        } else if (progress <= boundary2 - half) {
+            easyW = 0f; mediumW = 1f; hardW = 0f;
+        } else if (progress < boundary2 + half) {
+            float t = (float) ((progress - (boundary2 - half)) / (2 * half));
+            easyW = 0f; mediumW = 1f - t; hardW = t;
+        } else {
+            easyW = 0f; mediumW = 0f; hardW = 1f;
+        }
+        return new float[]{easyW, mediumW, hardW};
+    }
+
+    /** Linearly blends 3 colors by weight (weights should sum to ~1.0). */
+    private Color blendColor(Color easy, Color medium, Color hard, float[] w) {
+        int r = (int) (easy.getRed() * w[0] + medium.getRed() * w[1] + hard.getRed() * w[2]);
+        int gg = (int) (easy.getGreen() * w[0] + medium.getGreen() * w[1] + hard.getGreen() * w[2]);
+        int b = (int) (easy.getBlue() * w[0] + medium.getBlue() * w[1] + hard.getBlue() * w[2]);
+        return new Color(clampColorChannel(r), clampColorChannel(gg), clampColorChannel(b));
+    }
+
+    private int clampColorChannel(int v) {
+        return Math.max(0, Math.min(255, v));
+    }
+
+    private void drawStarCluster(Graphics g, int x, int y, int width, int height, Color mainColor, Color accentColor) {
+        // Main star (larger) -- uses the blended theme color for this moment in the stage
         int centerX = x + width / 2;
         int centerY = y + height / 2;
+        g.setColor(mainColor);
         g.fillOval(centerX - 2, centerY - 2, 4, 4);
- 
+
         // Smaller surrounding stars
+        g.setColor(accentColor);
         g.fillOval(centerX - 15, centerY - 10, 2, 2);
         g.fillOval(centerX + 12, centerY - 8, 2, 2);
         g.fillOval(centerX - 8, centerY + 12, 2, 2);
         g.fillOval(centerX + 10, centerY + 15, 2, 2);
- 
+
         // Tiny stars for more detail
         g.fillOval(centerX - 20, centerY + 5, 1, 1);
         g.fillOval(centerX + 18, centerY - 15, 1, 1);
@@ -593,11 +666,15 @@ public class Scene1 extends JPanel {
         g2d.dispose();
     }
  
+    // HUD layout below matches Scene2's drawHealthBar/drawStatusHUD exactly (same
+    // coordinates, fonts, and draw order) so both stages present a consistent dashboard.
     private void drawKillCounts(Graphics g) {
-        g.setColor(Color.white);
-        g.drawString("Scout Kills: " + scoutKills, 10, 30);
-        g.drawString("Wraith Kills: " + wraithKills, 10, 45);
-        g.drawString("Juggernaut Kills: " + juggernautKills, 10, 60);
+        g.setColor(Color.WHITE);
+        var small = new Font("Helvetica", Font.PLAIN, 13);
+        g.setFont(small);
+        g.drawString("Scout Kills: " + scoutKills, 10, 110);
+        g.drawString("Wraith Kills: " + wraithKills, 10, 125);
+        g.drawString("Juggernaut Kills: " + juggernautKills, 10, 140);
     }
  
     private void drawTimer(Graphics g) {
@@ -609,55 +686,49 @@ public class Scene1 extends JPanel {
         g.setFont(timerFont);
         var fm = g.getFontMetrics(timerFont);
  
-        // Flash red in the last 10 seconds to warn the player
+        // Flash red in the last 10 seconds to warn the player (Scene1-specific --
+        // Scene2 has no stage timer to warn about, so this behavior only exists here)
         if (framesLeft <= 10 * 60) {
             g.setColor(frame % 30 < 15 ? Color.RED : Color.WHITE);
         } else {
             g.setColor(Color.WHITE);
         }
  
-        g.drawString(timeText, BOARD_WIDTH - fm.stringWidth(timeText) - 10, 25);
+        g.drawString(timeText, BOARD_WIDTH - fm.stringWidth(timeText) - 10, 20);
  
-        // Also show current score in the same corner, right under the timer
         g.setColor(Color.WHITE);
         var scoreFont = new Font("Helvetica", Font.PLAIN, 14);
         g.setFont(scoreFont);
         var fmScore = g.getFontMetrics(scoreFont);
         String scoreText = "Score: " + score;
-        g.drawString(scoreText, BOARD_WIDTH - fmScore.stringWidth(scoreText) - 10, 45);
+        g.drawString(scoreText, BOARD_WIDTH - fmScore.stringWidth(scoreText) - 10, 40);
 
-        // Speed and Shots-upgrade level, same corner, under the score
         String speedText = "Speed: " + player.getSpeed();
-        g.drawString(speedText, BOARD_WIDTH - fmScore.stringWidth(speedText) - 10, 65);
+        g.drawString(speedText, BOARD_WIDTH - fmScore.stringWidth(speedText) - 10, 60);
         String shotsText = "Shots: " + player.getMaxShots();
-        g.drawString(shotsText, BOARD_WIDTH - fmScore.stringWidth(shotsText) - 10, 85);
-        
+        g.drawString(shotsText, BOARD_WIDTH - fmScore.stringWidth(shotsText) - 10, 80);
     }
  
     private void drawHealthBar(Graphics g) {
         if (player == null) return;
  
         int totalHealth = 5;
-        int currentHealth = player.getHealth(); // gets the health (0 to 5)
+        int currentHealth = player.getHealth();
  
-        // Health Bar position & size
         int x = 10;
-        int y = 80;
+        int y = 40;
         int barWidth = 150;
         int barHeight = 15;
  
-        // 1. Draw Background (Red for missing health)
         g.setColor(Color.RED);
         g.fillRect(x, y, barWidth, barHeight);
  
-        // 2. Draw Current Health (Green portion)
         if (currentHealth > 0) {
             int currentWidth = (barWidth * currentHealth) / totalHealth;
             g.setColor(Color.GREEN);
             g.fillRect(x, y, currentWidth, barHeight);
         }
  
-        // 3. Draw Outer Border & Text
         g.setColor(Color.WHITE);
         g.drawRect(x, y, barWidth, barHeight);
         g.drawString("HP: " + Math.max(0, currentHealth) + " / " + totalHealth, x + 160, y + 12);
@@ -667,9 +738,6 @@ public class Scene1 extends JPanel {
  
         g.setColor(Color.black);
         g.fillRect(0, 0, d.width, d.height);
- 
-        g.setColor(Color.white);
-        g.drawString("FRAME: " + frame, 10, 10);
  
         g.setColor(Color.green);
  
@@ -682,8 +750,8 @@ public class Scene1 extends JPanel {
             drawPlayer(g);
             drawShot(g);
             drawExplosions(g); // drawn last so bursts always render on top, never hidden behind a sprite
-            drawKillCounts(g);
             drawHealthBar(g);
+            drawKillCounts(g);
             drawPickupMessage(g);
             drawTimer(g);
  
@@ -1249,15 +1317,24 @@ public class Scene1 extends JPanel {
 
         if (key == KeyEvent.VK_SPACE) {
             if (shots.size() < player.getMaxShots()) {
-                    Shot shot = new Shot(x, y);
-                    shots.add(shot);
+                if (player.hasMultiShot()) {
+                    // 2 parallel bullets -- same trajectory, just offset vertically
+                    // at spawn. Shot has no angle/diagonal movement, so this can't
+                    // drift into a "spread" pattern; that's the separate, optional
+                    // Three-way Shot upgrade.
+                    shots.add(new Shot(x, y - 10));
+                    shots.add(new Shot(x, y + 10));
+                    shotsFired += 2;
+                } else {
+                    shots.add(new Shot(x, y));
                     shotsFired++;
-
-                    // Sound effect triggers on shot creation
-                    AudioPlayer.playSoundEffect("src/audio/fire.wav");
                 }
+
+                // Sound effect triggers on shot creation
+                AudioPlayer.playSoundEffect("src/audio/fire.wav");
             }
         }
+    }
     }
 
     private class MAdapter extends MouseAdapter {

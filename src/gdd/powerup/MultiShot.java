@@ -23,7 +23,14 @@ public class MultiShot extends PowerUp {
     }
 
     public void upgrade(Player player) {
-        // Upgrade the player's max simultaneous shots by 4 (per assignment: "Multi-shot - 4 steps")
+        // The actual visible effect: switches firing from 1 straight bullet per
+        // press to 2 parallel bullets per press (see Player.hasMultiShot()).
+        player.activateMultiShot();
+
+        // Also grants extra on-screen shot capacity, matching the assignment's
+        // literal "4 steps" wording -- this is a secondary bonus (lets more shots
+        // exist in flight at once) and is NOT what makes multi-shot visible; the
+        // parallel-bullet pattern above is.
         player.setMaxShots(player.getMaxShots() + 4);
         this.die(); // Remove the power-up after use
     }

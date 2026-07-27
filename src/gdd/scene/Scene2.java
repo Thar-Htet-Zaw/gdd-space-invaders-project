@@ -697,60 +697,120 @@ public class Scene2 extends JPanel {
         }
     }
 
+    /** EYE_BEAM_BARRAGE: charging = thin flickering targeting line with glowing "eye"
+     *  orbs at both ends (no more flat rectangle flash); firing = several thin glowing
+     *  beam strands per band (reads as a barrage of individual beams, not one solid
+     *  block) with brighter eye-glints anchoring each end. */
     private void drawEyeBeamAttack(Graphics2D g2d, Boss boss, boolean charging) {
         for (int[] zone : boss.getActiveZones()) {
             int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
             int centerY = zy + zh / 2;
 
             if (charging) {
-                if (frame % 8 < 4) {
-                    g2d.setColor(new Color(190, 60, 255, 130));
-                    g2d.fillRect(zx, zy, zw, zh);
+                if (frame % 8 < 5) {
+                    g2d.setColor(new Color(200, 80, 255, 70));
+                    g2d.setStroke(new BasicStroke(2f));
+                    g2d.drawLine(zx, centerY, zx + zw, centerY);
+
+                    int glintSize = 10 + (int) (4 * Math.sin(frame * 0.4));
+                    g2d.setColor(new Color(255, 220, 255, 220));
+                    g2d.fillOval(zx - glintSize / 2, centerY - glintSize / 2, glintSize, glintSize);
+                    g2d.fillOval(zx + zw - glintSize / 2, centerY - glintSize / 2, glintSize, glintSize);
                 }
             } else {
-                GradientPaint upperHalf = new GradientPaint(
-                        zx, zy, new Color(180, 40, 255, 0),
-                        zx, centerY, new Color(230, 150, 255, 220));
-                g2d.setPaint(upperHalf);
-                g2d.fillRect(zx, zy, zw, Math.max(1, zh / 2));
+                // Several thin parallel strands instead of one filled rectangle --
+                // each strand gets a soft glow via a few overlaid strokes, widest
+                // and dimmest on the outside, narrowest and brightest in the center.
+                int strandCount = 4;
+                int strandSpacing = Math.max(1, zh / (strandCount + 1));
+                for (int s = 1; s <= strandCount; s++) {
+                    int strandY = zy + s * strandSpacing;
 
-                GradientPaint lowerHalf = new GradientPaint(
-                        zx, centerY, new Color(230, 150, 255, 220),
-                        zx, zy + zh, new Color(180, 40, 255, 0));
-                g2d.setPaint(lowerHalf);
-                g2d.fillRect(zx, centerY, zw, Math.max(1, zh / 2));
+                    for (int layer = 3; layer >= 0; layer--) {
+                        float width = 2f + layer * 3f;
+                        int alpha = 200 - layer * 45;
+                        g2d.setColor(new Color(210, 90, 255, Math.max(0, alpha)));
+                        g2d.setStroke(new BasicStroke(width));
+                        g2d.drawLine(zx, strandY, zx + zw, strandY);
+                    }
+                    g2d.setColor(Color.WHITE);
+                    g2d.setStroke(new BasicStroke(1.5f));
+                    g2d.drawLine(zx, strandY, zx + zw, strandY);
+                }
 
-                g2d.setColor(new Color(255, 255, 255, 180));
-                g2d.setStroke(new BasicStroke(2f));
-                g2d.drawLine(zx, centerY, zx + zw, centerY);
+                int glintSize = 16;
+                g2d.setColor(new Color(255, 240, 255, 240));
+                g2d.fillOval(zx - glintSize / 2, centerY - glintSize / 2, glintSize, glintSize);
+                g2d.fillOval(zx + zw - glintSize / 2, centerY - glintSize / 2, glintSize, glintSize);
             }
         }
     }
 
+    /** SPORE_SWARM: bigger, slowly-drifting particles connected by faint tendril
+     *  threads (reads as a linked cluster, not scattered dots), wrapped in a soft
+     *  hazy cloud that ties the whole zone together into one cohesive swarm. */
     private void drawSporeSwarmAttack(Graphics2D g2d, Boss boss, boolean charging) {
         int zoneIndex = 0;
         for (int[] zone : boss.getActiveZones()) {
             int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
+            int cx = zx + zw / 2;
+            int cy = zy + zh / 2;
+            double clusterRadius = Math.min(zw, zh) / 2.0 + 12;
+
             Random particleRandom = new Random((long) zx * 92821L ^ (long) zy * 68917L ^ zoneIndex);
 
-            int particleCount = 6;
+            int particleCount = 10;
+            double[] px = new double[particleCount];
+            double[] py = new double[particleCount];
+            double[] sizeFactor = new double[particleCount];
+
             for (int i = 0; i < particleCount; i++) {
                 double baseAngle = particleRandom.nextDouble() * Math.PI * 2;
-                double baseDist = particleRandom.nextDouble() * (Math.min(zw, zh) / 2.0);
-                double px = zx + zw / 2.0 + Math.cos(baseAngle) * baseDist;
-                double py = zy + zh / 2.0 + Math.sin(baseAngle) * baseDist;
+                double baseDist = particleRandom.nextDouble() * clusterRadius * 0.8;
+                double driftSpeed = 0.3 + particleRandom.nextDouble() * 0.4;
+                sizeFactor[i] = 0.6 + particleRandom.nextDouble() * 0.9;
 
-                double pulse = 0.7 + 0.3 * Math.sin(frame * 0.3 + i);
-                int size = (int) ((charging ? 8 : 14) * pulse);
-                int alpha = charging ? 110 : 200;
-
-                g2d.setColor(new Color(140, 255, 90, alpha));
-                g2d.fillOval((int) (px - size / 2.0), (int) (py - size / 2.0), size, size);
-
-                int coreSize = Math.max(1, size / 2);
-                g2d.setColor(new Color(220, 255, 180, alpha));
-                g2d.fillOval((int) (px - coreSize / 2.0), (int) (py - coreSize / 2.0), coreSize, coreSize);
+                double angle = baseAngle + frame * 0.02 * driftSpeed; // slow orbital drift
+                px[i] = cx + Math.cos(angle) * baseDist;
+                py[i] = cy + Math.sin(angle) * baseDist * 0.8; // slightly flattened orbit
             }
+
+            // Soft hazy cloud ties the swarm together into one cohesive attack zone
+            float[] fractions = {0f, 1f};
+            Color[] hazeColors = {
+                new Color(110, 255, 90, charging ? 35 : 55),
+                new Color(110, 255, 90, 0)
+            };
+            g2d.setPaint(new RadialGradientPaint(cx, cy, (float) clusterRadius, fractions, hazeColors));
+            g2d.fillOval((int) (cx - clusterRadius), (int) (cy - clusterRadius),
+                    (int) (clusterRadius * 2), (int) (clusterRadius * 2));
+
+            // Faint tendril threads between neighboring spores -- reads as a
+            // connected cluster instead of scattered random dots
+            g2d.setColor(new Color(170, 255, 130, charging ? 35 : 60));
+            g2d.setStroke(new BasicStroke(1f));
+            for (int i = 0; i < particleCount; i++) {
+                int next = (i + 1) % particleCount;
+                g2d.drawLine((int) px[i], (int) py[i], (int) px[next], (int) py[next]);
+            }
+
+            // The spores themselves -- varied sizes, pulsing, glowing core. Base size
+            // roughly doubled from before (22 vs 14) so the swarm actually reads as
+            // a real threat instead of a handful of small dots.
+            for (int i = 0; i < particleCount; i++) {
+                double pulse = 0.75 + 0.25 * Math.sin(frame * 0.25 + i * 1.7);
+                int baseSize = charging ? 12 : 22;
+                int size = (int) (baseSize * sizeFactor[i] * pulse);
+                int alpha = charging ? 130 : 215;
+
+                g2d.setColor(new Color(130, 255, 90, alpha));
+                g2d.fillOval((int) (px[i] - size / 2.0), (int) (py[i] - size / 2.0), size, size);
+
+                int coreSize = Math.max(2, size / 2);
+                g2d.setColor(new Color(225, 255, 190, alpha));
+                g2d.fillOval((int) (px[i] - coreSize / 2.0), (int) (py[i] - coreSize / 2.0), coreSize, coreSize);
+            }
+
             zoneIndex++;
         }
     }
@@ -1292,15 +1352,14 @@ public class Scene2 extends JPanel {
                 int x = player.getX();
                 int y = player.getY();
 
-                int maxShots = player.getMaxShots();
-                if (shots.size() < maxShots) {
-                    if (maxShots >= 3) {
+                if (shots.size() < player.getMaxShots()) {
+                    if (player.hasMultiShot()) {
+                        // 2 parallel bullets -- same trajectory, just offset vertically
+                        // at spawn. Shot has no angle/diagonal movement, so this can't
+                        // drift into a "spread" pattern; that's the separate, optional
+                        // Three-way Shot upgrade. Matches Scene1's identical logic.
                         shots.add(new Shot(x, y - 10));
-                        shots.add(new Shot(x, y));
                         shots.add(new Shot(x, y + 10));
-                    } else if (maxShots == 2) {
-                        shots.add(new Shot(x, y - 8));
-                        shots.add(new Shot(x, y + 8));
                     } else {
                         shots.add(new Shot(x, y));
                     }

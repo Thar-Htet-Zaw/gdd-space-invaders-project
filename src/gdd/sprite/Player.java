@@ -10,7 +10,13 @@ public class Player extends Sprite {
     private static final int START_X = 50; 
     private static final int START_Y = 250; // Hardcoded middle Y coordinate
     private int currentSpeed = 4;
-    private int maxShots = 4; // matches the game's existing base simultaneous-shot cap
+    private int maxShots = 4; // on-screen shot CAPACITY cap only -- unrelated to how many bullets fire per press
+
+    // Multi-shot pickup: fires 2 parallel bullets per press instead of 1 (both
+    // travel straight ahead -- Shot has no angle/diagonal movement at all, so this
+    // is structurally incapable of becoming a "spread" pattern; that's reserved
+    // for the separate optional Three-way Shot upgrade, if built later).
+    private boolean multiShotActive = false;
     
     private int health = 5;
 
@@ -46,6 +52,14 @@ public class Player extends Sprite {
 
     public int getMaxShots() {
         return maxShots;
+    }
+
+    public boolean hasMultiShot() {
+        return multiShotActive;
+    }
+
+    public void activateMultiShot() {
+        multiShotActive = true;
     }
 
     public int setMaxShots(int maxShots) {
