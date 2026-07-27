@@ -41,6 +41,7 @@ public class Global {
     public static final String IMG_POWERUP_MULTISHOT = "src/images/powerup-m.png";
     public static final String IMG_BOMB = "src/images/enemy_bomb.png";
     public static final String IMG_BOSS = "src/images/boss.png";
+    public static final String IMG_BOSS_PHASE2 = "src/images/boss_phase2.png";
     public static final String IMG_GAME_OVER = "src/images/gameover.png";
 
     // Audio Files

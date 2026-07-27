@@ -1,6 +1,10 @@
 package gdd.sprite;
 
 import static gdd.Global.*;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -16,6 +20,34 @@ public class Boss extends Enemy {
     public static final int WIDTH = 585;
     public static final int HEIGHT = 585;
 
+    // TEMPORARY placeholder inset -- WIDTH/HEIGHT above is the full padded canvas,
+    // not the visible creature's silhouette. Using the full canvas as the hitbox
+    // means shots can register as "hits" (and spawn impact explosions) while still
+    // in empty transparent space nowhere near the actual art. These four numbers
+    // should be replaced with the real bounding box of the non-transparent pixels
+    // in boss.png / boss_phase2.png once available -- placeholder assumes the body
+    // sits roughly centered, occupying ~70% of the canvas.
+    private static final int HITBOX_INSET_LEFT = 90;
+    private static final int HITBOX_INSET_TOP = 90;
+    private static final int HITBOX_WIDTH = 400;
+    private static final int HITBOX_HEIGHT = 400;
+
+    public int getHitboxX() {
+        return this.x + HITBOX_INSET_LEFT;
+    }
+
+    public int getHitboxY() {
+        return this.y + HITBOX_INSET_TOP;
+    }
+
+    public int getHitboxWidth() {
+        return HITBOX_WIDTH;
+    }
+
+    public int getHitboxHeight() {
+        return HITBOX_HEIGHT;
+    }
+
     public static final int LASER_HEIGHT = 40; // vertical thickness of the laser beam band
 
     private final int maxHitPoints;
@@ -28,7 +60,6 @@ public class Boss extends Enemy {
     private static final int APPROACH_SPEED = 2; // speed while first entering, before reaching engageX
 
     private static final Random minionRandomizer = new Random();
-    private static final int MINION_CHANCE_RANGE = 400; // ~1-in-400 odds per frame, phase 2 only
 
     // --- Unified danger-zone attack system ---
     // All 4 attacks share one telegraph -> fire -> cooldown cycle, just with
@@ -44,13 +75,13 @@ public class Boss extends Enemy {
     private final List<int[]> activeZones = new ArrayList<>(); // each: {x, y, width, height}
 
     private static final Random attackRandomizer = new Random();
-    private static final int CHARGE_FRAMES = 75;       // ~1.25s telegraph warning
+    private static final int CHARGE_FRAMES = 45;       // ~1s telegraph warning (was ~1.25s)
     private static final int FIRE_FRAMES = 20;         // ~0.33s active damage window
-    private static final int COOLDOWN_PHASE1 = 240;    // ~4s between attacks
-    private static final int COOLDOWN_PHASE2 = 150;    // ~2.5s once enraged — faster pace
-    private static final int COOLDOWN_PHASE3 = 100;    // ~1.7s once desperate (<=20% HP) — relentless
+    private static final int COOLDOWN_PHASE1 = 80;    // ~2.2s between attacks (was ~4s)
+    private static final int COOLDOWN_PHASE2 = 60;     // ~1.5s once enraged (was ~2.5s)
+    private static final int COOLDOWN_PHASE3 = 40;     // ~1s once desperate (<=20% HP) — relentless
 
-    private static final int INITIAL_GRACE_FRAMES = 90; // ~1.5s buffer after engaging before the very first attack
+    private static final int INITIAL_GRACE_FRAMES = 45; // ~0.75s buffer after engaging (was ~1.5s)
     private static final int COMBO_GAP = 45;              // ~0.75s gap between two chained attacks
     private static final int MAX_COMBO_CHAIN = 1;         // at most 1 extra attack chained on, then a full cooldown
 
@@ -60,6 +91,15 @@ public class Boss extends Enemy {
     private int comboChainCount = 0;
     private boolean phaseThree = false;      // "desperation" — HP at/below 20%, faster + always combos
 
+    private final Image phase1Image;
+    private final Image phase2Image;
+
+    // Minecraft-style "flash red when hit" -- counts down each real game frame
+    // (ticked in act(), not in draw code, so its timing is tied to game logic
+    // rather than however many times Swing happens to call paintComponent).
+    private static final int DAMAGE_FLASH_DURATION = 10; // ~170ms at 60fps
+    private int damageFlashTimer = 0;
+
     public Boss(int x, int y, int startingHitPoints) {
         super(x, y);
         setHitPoints(startingHitPoints);
@@ -67,10 +107,29 @@ public class Boss extends Enemy {
         this.engageX = BOARD_WIDTH - (int) (WIDTH * 0.7); // ~30% of the boss's width extends past the right edge
         this.baseY = y + 5; // small buffer below the boss HP bar, since there's little vertical room to spare
 
-        // Override the default enemy-sized sprite with a larger, boss-appropriate size.
-        var ii = new ImageIcon(IMG_BOSS);
-        var scaledImage = ii.getImage().getScaledInstance(WIDTH, HEIGHT, java.awt.Image.SCALE_SMOOTH);
-        setImage(scaledImage);
+        // Both forms are pre-scaled once up front (not re-scaled every phase switch).
+        // Uses the same alpha-safe BufferedImage/Graphics2D scaling as Explosion --
+        // Image.getScaledInstance() under-represents opacity on images that are mostly
+        // transparent with sparse bright detail, which can read as a faint, nearly
+        // invisible result. Overrides the default enemy-sized sprite with a larger,
+        // boss-appropriate size either way.
+        phase1Image = loadBossImage(IMG_BOSS);
+        phase2Image = loadBossImage(IMG_BOSS_PHASE2);
+        setImage(phase1Image);
+    }
+
+    private static Image loadBossImage(String path) {
+        var ii = new ImageIcon(path);
+        BufferedImage scaled = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = scaled.createGraphics();
+        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g2d.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+        g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        // ii.getImage() is already fully loaded by this point (ImageIcon blocks until
+        // loaded internally), so a null ImageObserver here is safe.
+        g2d.drawImage(ii.getImage(), 0, 0, WIDTH, HEIGHT, null);
+        g2d.dispose();
+        return scaled;
     }
 
     @Override
@@ -82,9 +141,11 @@ public class Boss extends Enemy {
         }
 
         boolean died = super.hit();
+        damageFlashTimer = DAMAGE_FLASH_DURATION; // flash red on every hit that actually lands
 
         if (!phaseTwo && !died && getHitPoints() <= maxHitPoints / 2) {
             phaseTwo = true;
+            setImage(phase2Image); // swap to the enraged form the instant phase 2 triggers
         }
         if (!phaseThree && !died && getHitPoints() <= maxHitPoints * 0.2) {
             phaseThree = true;
@@ -95,6 +156,10 @@ public class Boss extends Enemy {
 
     @Override
     public void act(int direction) {
+        if (damageFlashTimer > 0) {
+            damageFlashTimer--;
+        }
+
         if (this.x > engageX) {
             // Still approaching — moves in like a regular enemy, then locks in place
             this.x -= APPROACH_SPEED;
@@ -109,6 +174,11 @@ public class Boss extends Enemy {
             this.x = engageX + (int) (4 * Math.sin(swayFrame));
             this.y = baseY + (int) (3 * Math.sin(swayFrame * 1.3 + 1.0));
         }
+    }
+
+    /** 1.0 = just hit (full red), fading linearly to 0.0 = no flash. */
+    public float getDamageFlashIntensity() {
+        return damageFlashTimer / (float) DAMAGE_FLASH_DURATION;
     }
 
     public boolean isPhaseTwo() {
@@ -129,21 +199,34 @@ public class Boss extends Enemy {
         return null;
     }
 
+    private static final int MINION_CHANCE_PHASE1 = 200; // ~1-in-200 odds per frame (~3.4s average)
+    private static final int MINION_CHANCE_PHASE2 = 110; // ~1-in-110 (~1.9s average)
+    private static final int MINION_CHANCE_PHASE3 = 65;  // ~1-in-65 (~1.1s average) — relentless
+
     /**
-     * Rolls the odds for the boss to spawn a minion this frame. Only active once
-     * enraged (phase 2) and only once the boss has reached its fighting position.
-     * Returns "Alien1"/"Alien2"/"Alien3", or null if nothing spawned this frame.
+     * Rolls the odds for the boss to spawn minions this frame. Active as soon as it
+     * engages (phase 1 included, not just once enraged), and spawns MORE minions at
+     * once, MORE often, as it progresses through phases. Returns a list of enemy
+     * type strings ("Alien1"/"Alien2"/"Alien3"), empty if nothing spawned this frame.
      */
-    public String maybeSpawnMinionType() {
-        if (!phaseTwo || !hasEngaged()) {
-            return null;
+    public List<String> maybeSpawnMinionTypes() {
+        if (!hasEngaged()) {
+            return new ArrayList<>();
         }
-        int chanceRange = phaseThree ? MINION_CHANCE_RANGE / 2 : MINION_CHANCE_RANGE; // phase 3: roughly double the odds
-        if (minionRandomizer.nextInt(chanceRange) == 0) {
+
+        int chanceRange = phaseThree ? MINION_CHANCE_PHASE3 : (phaseTwo ? MINION_CHANCE_PHASE2 : MINION_CHANCE_PHASE1);
+        if (minionRandomizer.nextInt(chanceRange) != 0) {
+            return new ArrayList<>();
+        }
+
+        // How many spawn together scales with phase -- more chaotic once enraged.
+        int count = phaseThree ? 3 : (phaseTwo ? 2 : 1);
+        List<String> types = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
             int roll = minionRandomizer.nextInt(3);
-            return roll == 0 ? "Alien1" : (roll == 1 ? "Alien2" : "Alien3");
+            types.add(roll == 0 ? "Alien1" : (roll == 1 ? "Alien2" : "Alien3"));
         }
-        return null;
+        return types;
     }
 
     /**
@@ -220,7 +303,21 @@ public class Boss extends Enemy {
         activeZones.clear();
 
         if (!phaseTwo) {
-            currentAttack = AttackType.LASER; // phase 1: laser only
+            // Phase 1: alternates between the two "starter" attacks, so the boss is
+            // never just passively sitting there taking hits before it enrages.
+            // Eye Beam Barrage and Spore Swarm stay exclusive to phase 2+, so there's
+            // still a real escalation once it does enrage.
+            AttackType[] phase1Pool = {AttackType.LASER, AttackType.TENTACLE_SLAM};
+            List<AttackType> candidates = new ArrayList<>();
+            for (AttackType type : phase1Pool) {
+                if (type != lastAttack) {
+                    candidates.add(type);
+                }
+            }
+            if (candidates.isEmpty()) {
+                candidates.add(phase1Pool[0]); // safety fallback, shouldn't normally trigger
+            }
+            currentAttack = candidates.get(attackRandomizer.nextInt(candidates.size()));
         } else {
             // Pick uniformly among all attacks EXCEPT whichever one just fired, so the
             // same attack never happens twice in a row — keeps the pattern feeling
@@ -269,12 +366,16 @@ public class Boss extends Enemy {
             }
 
             case SPORE_SWARM: {
-                // Cluster of small patches scattered near the player's row
+                // Cluster of small patches scattered around the player's position at
+                // the moment the attack starts charging -- both X and Y are now tied
+                // to the player, so the cluster is always a genuine dodge challenge
+                // instead of sometimes landing nowhere near them.
                 for (int i = 0; i < 4; i++) {
                     int zoneSize = 55;
-                    int zx = 150 + attackRandomizer.nextInt(450);
-                    int zy = Math.max(20, Math.min(BOARD_HEIGHT - zoneSize - 20,
-                            playerY - 60 + attackRandomizer.nextInt(140)));
+                    int offsetX = -70 + attackRandomizer.nextInt(140);
+                    int offsetY = -70 + attackRandomizer.nextInt(140);
+                    int zx = Math.max(0, Math.min(BOARD_WIDTH - zoneSize, playerX + offsetX));
+                    int zy = Math.max(0, Math.min(BOARD_HEIGHT - zoneSize, playerY + offsetY));
                     activeZones.add(new int[]{zx, zy, zoneSize, zoneSize});
                 }
                 break;

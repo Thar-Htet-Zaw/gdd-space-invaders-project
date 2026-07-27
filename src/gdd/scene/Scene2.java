@@ -16,13 +16,18 @@ import gdd.sprite.Player;
 import gdd.sprite.Shot;
 
 import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GradientPaint;
 import java.awt.Image;
+import java.awt.RadialGradientPaint;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
+import java.awt.image.BufferedImage;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
@@ -69,7 +74,7 @@ public class Scene2 extends JPanel {
 
     private final Random randomizer = new Random();
     private HashMap<Integer, SpawnDetails> spawnMap = new HashMap<>();
-    private static final int BOSS_HIT_POINTS = 100;
+    private static final int BOSS_HIT_POINTS = 500;
     private int bossSpawnFrame;
     private static final int WARNING_DURATION_FRAMES = 180; // ~3s flickering warning before boss arrives
 
@@ -177,7 +182,15 @@ public class Scene2 extends JPanel {
         FORMATION_V_SMALL, FORMATION_WALL_SMALL, FORMATION_V_LARGE, FORMATION_WALL_LARGE, FORMATION_DIAGONAL_LARGE
     };
 
+    private static final boolean SKIP_WAVES_FOR_TESTING = true; // TEMP: set true to jump straight to the boss
+
     private void loadSpawnDetails() {
+        if (SKIP_WAVES_FOR_TESTING) {
+            bossSpawnFrame = 100;
+            spawnMap.put(bossSpawnFrame, new SpawnDetails("Boss", 720, 100));
+            return;
+        }
+
         // Periodic Power-Up Spawns spread throughout the 5 minutes
         spawnMap.put(300, new SpawnDetails("PowerUp-SpeedUp", 720, 200));
         spawnMap.put(1800, new SpawnDetails("PowerUp-MultiShot", 720, 350));
@@ -344,6 +357,14 @@ public class Scene2 extends JPanel {
         int srcW = Boss.WIDTH;
         int srcH = Boss.HEIGHT;
 
+        // Minecraft-style "flash red when hit" -- tints the boss\'s own silhouette
+        // (via AlphaComposite.SRC_ATOP, which only paints where the destination
+        // already has alpha) rather than drawing a red box over/around it.
+        float flash = boss.getDamageFlashIntensity();
+        if (flash > 0f) {
+            img = applyRedTint(img, srcW, srcH, flash);
+        }
+
         double amp = boss.isPhaseTwo() ? 0.02 : 0.01;
         double pulse = 1.0 + amp * Math.sin(boss.getAnimFrame() * 0.2);
         int w = (int) (srcW * pulse);
@@ -376,6 +397,24 @@ public class Scene2 extends JPanel {
                     0, srcY1, srcW, srcY2,
                     this);
         }
+    }
+
+    /**
+     * Returns a copy of {@code source} tinted red, masked by the source image's own
+     * alpha channel -- fully transparent pixels stay transparent, opaque pixels get
+     * blended toward solid red by {@code intensity} (0 = no change, 1 = fully red).
+     * Built on a fresh ARGB BufferedImage so SRC_ATOP has real per-pixel alpha to
+     * mask against (the on-screen Swing back-buffer isn't guaranteed to).
+     */
+    private Image applyRedTint(Image source, int width, int height, float intensity) {
+        BufferedImage tinted = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = tinted.createGraphics();
+        g2d.drawImage(source, 0, 0, width, height, this);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_ATOP, intensity));
+        g2d.setColor(Color.RED);
+        g2d.fillRect(0, 0, width, height);
+        g2d.dispose();
+        return tinted;
     }
 
     private void drawBombs(Graphics g) {
@@ -561,34 +600,177 @@ public class Scene2 extends JPanel {
 
         boolean charging = boss.isCharging();
 
-        if (charging && frame % 10 >= 5) {
-            return;
-        }
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        Color color;
         switch (boss.getCurrentAttack()) {
+            case LASER:
+                drawLaserAttack(g2d, boss, charging);
+                break;
             case TENTACLE_SLAM:
-                color = charging ? new Color(0, 100, 0, 120) : new Color(0, 180, 0, 220);
+                drawSlamAttack(g2d, boss, charging);
                 break;
             case EYE_BEAM_BARRAGE:
-                color = charging ? new Color(150, 0, 200, 120) : new Color(200, 0, 255, 220);
+                drawEyeBeamAttack(g2d, boss, charging);
                 break;
             case SPORE_SWARM:
-                color = charging ? new Color(100, 200, 0, 120) : new Color(140, 255, 0, 220);
-                break;
-            case LASER:
-            default:
-                color = charging ? new Color(255, 0, 0, 120) : new Color(255, 60, 0, 220);
+                drawSporeSwarmAttack(g2d, boss, charging);
                 break;
         }
 
-        g.setColor(color);
+        g2d.dispose();
+    }
+
+    /** LASER: charging = thin flickering targeting line; firing = full-height beam
+     *  with a bright white-hot core fading to red/orange, plus animated shimmer strands. */
+    private void drawLaserAttack(Graphics2D g2d, Boss boss, boolean charging) {
         for (int[] zone : boss.getActiveZones()) {
-            if (boss.getCurrentAttack() == Boss.AttackType.SPORE_SWARM) {
-                g.fillOval(zone[0], zone[1], zone[2], zone[3]);
+            int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
+            int centerY = zy + zh / 2;
+
+            if (charging) {
+                if (frame % 10 < 5) {
+                    g2d.setColor(new Color(255, 80, 40, 60));
+                    g2d.fillRect(zx, centerY - 8, zw, 16);
+
+                    g2d.setColor(new Color(255, 60, 40, 210));
+                    g2d.setStroke(new BasicStroke(3f));
+                    g2d.drawLine(zx, centerY, zx + zw, centerY);
+                }
             } else {
-                g.fillRect(zone[0], zone[1], zone[2], zone[3]);
+                GradientPaint upperHalf = new GradientPaint(
+                        zx, zy, new Color(255, 120, 40, 0),
+                        zx, centerY, new Color(255, 255, 240, 230));
+                g2d.setPaint(upperHalf);
+                g2d.fillRect(zx, zy, zw, Math.max(1, zh / 2));
+
+                GradientPaint lowerHalf = new GradientPaint(
+                        zx, centerY, new Color(255, 255, 240, 230),
+                        zx, zy + zh, new Color(255, 120, 40, 0));
+                g2d.setPaint(lowerHalf);
+                g2d.fillRect(zx, centerY, zw, Math.max(1, zh / 2));
+
+                g2d.setColor(Color.WHITE);
+                g2d.setStroke(new BasicStroke(3f));
+                g2d.drawLine(zx, centerY, zx + zw, centerY);
+
+                g2d.setColor(new Color(255, 200, 120, 160));
+                g2d.setStroke(new BasicStroke(1.5f));
+                int shimmerOffset = (frame * 5) % 40;
+                for (int sx = zx - 40 + shimmerOffset; sx < zx + zw; sx += 40) {
+                    g2d.drawLine(sx, zy, sx + 12, zy + zh);
+                }
             }
+        }
+    }
+
+    /** TENTACLE_SLAM: charging = pulsing warning rings expanding from the target;
+     *  firing = radial burst fill with jagged crack lines radiating outward. */
+    private void drawSlamAttack(Graphics2D g2d, Boss boss, boolean charging) {
+        for (int[] zone : boss.getActiveZones()) {
+            int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
+            int cx = zx + zw / 2;
+            int cy = zy + zh / 2;
+            float radius = Math.min(zw, zh) / 2f;
+
+            if (charging) {
+                g2d.setStroke(new BasicStroke(3f));
+                for (int ring = 0; ring < 3; ring++) {
+                    float ringProgress = ((frame * 3 + ring * 30) % 90) / 90f;
+                    float r = radius * ringProgress;
+                    int alpha = (int) (200 * (1f - ringProgress));
+                    g2d.setColor(new Color(60, 220, 90, Math.max(0, alpha)));
+                    g2d.drawOval((int) (cx - r), (int) (cy - r), (int) (r * 2), (int) (r * 2));
+                }
+            } else {
+                float[] fractions = {0f, 0.6f, 1f};
+                Color[] colors = {
+                    new Color(220, 255, 200, 230),
+                    new Color(60, 200, 90, 180),
+                    new Color(20, 100, 40, 0)
+                };
+                RadialGradientPaint burst = new RadialGradientPaint(
+                        cx, cy, Math.max(1f, radius), fractions, colors);
+                g2d.setPaint(burst);
+                g2d.fillOval((int) (cx - radius), (int) (cy - radius), (int) (radius * 2), (int) (radius * 2));
+
+                // Deterministic per-zone seed so the cracks stay stable for the whole
+                // firing window instead of jittering to a new random pattern every frame.
+                g2d.setColor(new Color(230, 255, 210, 200));
+                g2d.setStroke(new BasicStroke(2f));
+                Random crackRandom = new Random((long) cx * 73856093L ^ (long) cy * 19349663L);
+                for (int i = 0; i < 8; i++) {
+                    double angle = crackRandom.nextDouble() * Math.PI * 2;
+                    double len = radius * (0.6 + crackRandom.nextDouble() * 0.4);
+                    int ex = (int) (cx + Math.cos(angle) * len);
+                    int ey = (int) (cy + Math.sin(angle) * len);
+                    g2d.drawLine(cx, cy, ex, ey);
+                }
+            }
+        }
+    }
+
+    /** EYE_BEAM_BARRAGE: charging = flickering purple wash; firing = glowing bands
+     *  with a bright core line, same gradient technique as the laser. */
+    private void drawEyeBeamAttack(Graphics2D g2d, Boss boss, boolean charging) {
+        for (int[] zone : boss.getActiveZones()) {
+            int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
+            int centerY = zy + zh / 2;
+
+            if (charging) {
+                if (frame % 8 < 4) {
+                    g2d.setColor(new Color(190, 60, 255, 130));
+                    g2d.fillRect(zx, zy, zw, zh);
+                }
+            } else {
+                GradientPaint upperHalf = new GradientPaint(
+                        zx, zy, new Color(180, 40, 255, 0),
+                        zx, centerY, new Color(230, 150, 255, 220));
+                g2d.setPaint(upperHalf);
+                g2d.fillRect(zx, zy, zw, Math.max(1, zh / 2));
+
+                GradientPaint lowerHalf = new GradientPaint(
+                        zx, centerY, new Color(230, 150, 255, 220),
+                        zx, zy + zh, new Color(180, 40, 255, 0));
+                g2d.setPaint(lowerHalf);
+                g2d.fillRect(zx, centerY, zw, Math.max(1, zh / 2));
+
+                g2d.setColor(new Color(255, 255, 255, 180));
+                g2d.setStroke(new BasicStroke(2f));
+                g2d.drawLine(zx, centerY, zx + zw, centerY);
+            }
+        }
+    }
+
+    /** SPORE_SWARM: a cluster of small pulsing glowing particles scattered within
+     *  each zone, instead of one flat oval -- reads as an actual swarm. */
+    private void drawSporeSwarmAttack(Graphics2D g2d, Boss boss, boolean charging) {
+        int zoneIndex = 0;
+        for (int[] zone : boss.getActiveZones()) {
+            int zx = zone[0], zy = zone[1], zw = zone[2], zh = zone[3];
+            // Deterministic per-zone seed so particle positions stay stable across
+            // frames within one attack, instead of re-randomizing every draw call.
+            Random particleRandom = new Random((long) zx * 92821L ^ (long) zy * 68917L ^ zoneIndex);
+
+            int particleCount = 6;
+            for (int i = 0; i < particleCount; i++) {
+                double baseAngle = particleRandom.nextDouble() * Math.PI * 2;
+                double baseDist = particleRandom.nextDouble() * (Math.min(zw, zh) / 2.0);
+                double px = zx + zw / 2.0 + Math.cos(baseAngle) * baseDist;
+                double py = zy + zh / 2.0 + Math.sin(baseAngle) * baseDist;
+
+                double pulse = 0.7 + 0.3 * Math.sin(frame * 0.3 + i);
+                int size = (int) ((charging ? 8 : 14) * pulse);
+                int alpha = charging ? 110 : 200;
+
+                g2d.setColor(new Color(140, 255, 90, alpha));
+                g2d.fillOval((int) (px - size / 2.0), (int) (py - size / 2.0), size, size);
+
+                int coreSize = Math.max(1, size / 2);
+                g2d.setColor(new Color(220, 255, 180, alpha));
+                g2d.fillOval((int) (px - coreSize / 2.0), (int) (py - coreSize / 2.0), coreSize, coreSize);
+            }
+            zoneIndex++;
         }
     }
 
@@ -791,11 +973,15 @@ public class Scene2 extends JPanel {
                 int shotY = shot.getY();
 
                 for (Enemy enemy : enemies) {
-                    int enemyX = enemy.getX();
-                    int enemyY = enemy.getY();
+                    // Boss uses a tighter hitbox matching the visible creature body,
+                    // not its full padded canvas (Boss.WIDTH/HEIGHT) -- otherwise shots
+                    // register as hits while still in transparent space nowhere near
+                    // the actual art, and impact explosions spawn off in empty space.
+                    int enemyX = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxX() : enemy.getX();
+                    int enemyY = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxY() : enemy.getY();
 
-                    int hitWidth = (enemy instanceof Boss) ? Boss.WIDTH : ALIEN_WIDTH;
-                    int hitHeight = (enemy instanceof Boss) ? Boss.HEIGHT : ALIEN_HEIGHT;
+                    int hitWidth = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxWidth() : ALIEN_WIDTH;
+                    int hitHeight = (enemy instanceof Boss) ? ((Boss) enemy).getHitboxHeight() : ALIEN_HEIGHT;
 
                     if (enemy.isVisible() && shot.isVisible()
                             && shotX >= enemyX
@@ -803,11 +989,28 @@ public class Scene2 extends JPanel {
                             && shotY >= enemyY
                             && shotY <= enemyY + hitHeight) {
 
+                        // Boss only takes damage once fully engaged (see Boss.hit()) -- checked
+                        // here, before hit() runs, purely to know whether to spawn an impact burst.
+                        boolean bossTookRealDamage = (enemy instanceof Boss) && ((Boss) enemy).hasEngaged();
+
                         boolean enemyDied = enemy.hit();
+
+                        if (enemy instanceof Boss && bossTookRealDamage) {
+                            // Impact burst right where the bullet connected -- fires on every
+                            // hit, not just the kill, since the boss survives many hits.
+                            explosions.add(new Explosion(shotX, shotY));
+                        }
+
                         if (enemyDied) {
                             deaths++;
                             AudioPlayer.playSoundEffect(Global.AUD_EXPLODE);
-                            explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+                            if (!(enemy instanceof Boss)) {
+                                // Regular enemies vanish on death, so their death burst is
+                                // still centered on the enemy itself. The boss survives the
+                                // fight until this final blow, and already got its own
+                                // per-hit impact burst above at the exact point of contact.
+                                explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+                            }
 
                             if (enemy instanceof Boss) {
                                 score += 5000;
@@ -885,8 +1088,8 @@ public class Scene2 extends JPanel {
 
             boss.updateAttack(player.getX(), player.getY());
 
-            String minionType = boss.maybeSpawnMinionType();
-            if (minionType != null) {
+            List<String> minionTypes = boss.maybeSpawnMinionTypes();
+            for (String minionType : minionTypes) {
                 int minionY = 60 + randomizer.nextInt(500);
                 switch (minionType) {
                     case "Alien1":
