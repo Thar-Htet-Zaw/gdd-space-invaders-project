@@ -17,8 +17,12 @@ public class Player extends Sprite {
     // is structurally incapable of becoming a "spread" pattern; that's reserved
     // for the separate optional Three-way Shot upgrade, if built later).
     private boolean multiShotActive = false;
-    
-    private int health = 5;
+
+    // Max/starting player HP. Referenced by Scene1/Scene2's health bar and
+    // end-of-stage stats display so they can't drift out of sync with this value.
+    public static final int MAX_HEALTH = 10;
+
+    private int health = MAX_HEALTH;
 
     public Player() {
         initPlayer();

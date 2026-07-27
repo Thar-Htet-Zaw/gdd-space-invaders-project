@@ -483,7 +483,7 @@ public class Scene2 extends JPanel {
             return;
         }
 
-        int totalHealth = 5;
+        int totalHealth = Player.MAX_HEALTH;
         int currentHealth = player.getHealth();
 
         int x = 10;

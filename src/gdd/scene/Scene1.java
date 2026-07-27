@@ -626,7 +626,7 @@ public class Scene1 extends JPanel {
     private void drawHealthBar(Graphics g) {
         if (player == null) return;
  
-        int totalHealth = 5;
+        int totalHealth = Player.MAX_HEALTH;
         int currentHealth = player.getHealth();
         int x = 10;
         int y = 40;
@@ -753,7 +753,7 @@ public class Scene1 extends JPanel {
 
         drawStatRow(g2d, "Shots Fired:", String.valueOf(shotsFired), col2X, startY, labelFont, valFont, Color.WHITE);
         drawStatRow(g2d, "Accuracy:", accuracy + "%", col2X, startY + rowGap, labelFont, valFont, accuracy >= 50 ? Color.GREEN : Color.ORANGE);
-        drawStatRow(g2d, "Health:", Math.max(0, player.getHealth()) + " / 5", col2X, startY + rowGap * 2, labelFont, valFont, Color.GREEN);
+        drawStatRow(g2d, "Health:", Math.max(0, player.getHealth()) + " / " + Player.MAX_HEALTH, col2X, startY + rowGap * 2, labelFont, valFont, Color.GREEN);
         drawStatRow(g2d, "Final Speed:", String.valueOf(player.getSpeed()), col2X, startY + rowGap * 3, labelFont, valFont, Color.WHITE);
         drawStatRow(g2d, "Max Shots:", String.valueOf(player.getMaxShots()), col2X, startY + rowGap * 4, labelFont, valFont, Color.WHITE);
 
