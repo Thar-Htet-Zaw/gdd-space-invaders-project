@@ -23,8 +23,8 @@ public class HealUp extends PowerUp {
 
     @Override
     public void upgrade(Player player) {
-        // Increases health by 1, up to maximum cap of 5
-        if (player.getHealth() < 5) {
+        // Increases health by 1, up to the player's max HP
+        if (player.getHealth() < Player.MAX_HEALTH) {
             player.setHealth(player.getHealth() + 1);
         }
         die();
